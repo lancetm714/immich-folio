@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isInstalled, normalizeApiBase, validateSetupToken } from '@/lib/install';
+import { isInstalled, normalizeApiBase } from '@/lib/install';
 import { checkRateLimit, getClientIp, retryAfterSeconds } from '@/lib/rate-limit';
 
 /** Album discovery attempts per minute per IP — only live before install. */
@@ -20,11 +20,6 @@ interface AlbumSummary {
 export async function POST(request: NextRequest) {
   if (isInstalled()) {
     return NextResponse.json({ error: 'Setup is already complete' }, { status: 403 });
-  }
-
-  const token = request.nextUrl.searchParams.get('token') ?? request.headers.get('x-setup-token');
-  if (!validateSetupToken(token)) {
-    return NextResponse.json({ error: 'Invalid or missing setup token' }, { status: 403 });
   }
 
   const ip = getClientIp(request);

@@ -14,7 +14,7 @@ interface Album {
 
 interface Props {
   initialApiUrl: string;
-  setupToken: string;
+  setupToken?: string;
 }
 
 const STEPS = ['Connect', 'Albums', 'Site', 'Finish'] as const;
@@ -71,7 +71,7 @@ export function InstallWizard({ initialApiUrl, setupToken }: Props) {
     try {
       const res = await fetch('/api/install/albums', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-setup-token': setupToken },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ apiUrl: apiUrl.trim(), apiKey: apiKey.trim() }),
       });
       const data = await res.json();
@@ -108,7 +108,7 @@ export function InstallWizard({ initialApiUrl, setupToken }: Props) {
     try {
       const res = await fetch('/api/install', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-setup-token': setupToken },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           apiUrl: apiUrl.trim(),
           apiKey: apiKey.trim(),

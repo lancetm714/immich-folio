@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
-import { completeInstall, isInstalled, normalizeApiBase, validateSetupToken } from '@/lib/install';
+import { completeInstall, isInstalled, normalizeApiBase } from '@/lib/install';
 import { invalidateConfigCache } from '@/lib/config';
 import { immich } from '@/lib/immich';
 import { checkRateLimit, getClientIp, retryAfterSeconds } from '@/lib/rate-limit';
@@ -8,18 +8,13 @@ import { checkRateLimit, getClientIp, retryAfterSeconds } from '@/lib/rate-limit
 /** Install submissions per minute per IP — only live before install. */
 const INSTALL_RPM = 10;
 
-const THEME_PRESETS = ['studio', 'studio-modern', 'minimal', 'editorial', 'classic', 'noir', 'monograph'];
+const THEME_PRESETS = ['studio', 'minimal', 'editorial', 'classic', 'noir', 'monograph'];
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** POST: run the install wizard's final step — verify, then write config. */
 export async function POST(request: NextRequest) {
   if (isInstalled()) {
     return NextResponse.json({ error: 'Setup is already complete' }, { status: 403 });
-  }
-
-  const token = request.nextUrl.searchParams.get('token') ?? request.headers.get('x-setup-token');
-  if (!validateSetupToken(token)) {
-    return NextResponse.json({ error: 'Invalid or missing setup token' }, { status: 403 });
   }
 
   const ip = getClientIp(request);
