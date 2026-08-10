@@ -8,6 +8,7 @@
 
 import crypto from 'crypto';
 import { env } from './env';
+import { getInstallCredentials } from './install';
 
 let _fallbackSecret: string | null = null;
 let _warned = false;
