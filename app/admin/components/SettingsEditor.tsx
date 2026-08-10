@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import * as Icons from './Icons';
+import { BlogEditor } from './BlogEditor';
 
 interface Settings {
   title?: string;
@@ -65,6 +66,7 @@ interface Settings {
     opacity?: number;
     position?: 'bottom-right' | 'bottom-left' | 'center';
   };
+  blog?: { enabled?: boolean };
 }
 
 const PRESETS = ['studio', 'studio-modern', 'minimal', 'editorial', 'classic', 'noir', 'monograph'];
@@ -73,7 +75,10 @@ const PHOTO_FRAMES = ['none', 'passepartout', 'shadow'];
 const HERO_STYLES = ['split', 'fullbleed', 'minimal', 'stacked', 'typographic', 'mosaic'];
 const ASPECT_RATIOS = ['1', '3/2', '2/3', '16/9', 'auto'];
 
-const THEME_INFO: Record<string, { desc: string; label: string; accent: string; bg: string; tile: string }> = {
+const THEME_INFO: Record<
+  string,
+  { desc: string; label: string; accent: string; bg: string; tile: string }
+> = {
   studio: {
     label: 'Studio',
     desc: 'Clean, high-contrast grid with sans-serif type.',
@@ -138,7 +143,8 @@ export default function SettingsEditor() {
   useEffect(() => {
     loadSettings();
     if (typeof window !== 'undefined') {
-      const mode = (document.documentElement.getAttribute('data-theme') as 'dark' | 'light') || 'dark';
+      const mode =
+        (document.documentElement.getAttribute('data-theme') as 'dark' | 'light') || 'dark';
       setCurrentMode(mode);
     }
   }, []);
@@ -283,6 +289,7 @@ export default function SettingsEditor() {
     { id: 'legal', label: 'Legal' },
     { id: 'seo', label: 'SEO' },
     { id: 'security', label: 'Security & Protection' },
+    { id: 'blog', label: 'Blog' },
   ];
 
   return (
@@ -298,7 +305,15 @@ export default function SettingsEditor() {
               {saveMessage}
             </span>
           ) : (
-            <span style={{ fontSize: '0.75rem', color: 'var(--admin-text-muted)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+            <span
+              style={{
+                fontSize: '0.75rem',
+                color: 'var(--admin-text-muted)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+              }}
+            >
               ⚡ Live Sync (No Docker restart required)
             </span>
           )}
@@ -331,8 +346,12 @@ export default function SettingsEditor() {
           {activeSection === 'general' && (
             <div className="settings-panel">
               <div className="settings-section-header">
-                <h3><Icons.IconGear size={18} /> General Site Settings</h3>
-                <p className="settings-section-sub">Configure basic site identity, language, and core feature toggles.</p>
+                <h3>
+                  <Icons.IconGear size={18} /> General Site Settings
+                </h3>
+                <p className="settings-section-sub">
+                  Configure basic site identity, language, and core feature toggles.
+                </p>
               </div>
 
               <div className="admin-field">
@@ -368,8 +387,12 @@ export default function SettingsEditor() {
               <div className="settings-section-divider" />
 
               <div className="settings-section-header">
-                <h3><Icons.IconSparkles size={18} /> Portfolio Features &amp; Modules</h3>
-                <p className="settings-section-sub">Enable or disable optional portfolio modules, privacy analytics, and map widgets.</p>
+                <h3>
+                  <Icons.IconSparkles size={18} /> Portfolio Features &amp; Modules
+                </h3>
+                <p className="settings-section-sub">
+                  Enable or disable optional portfolio modules, privacy analytics, and map widgets.
+                </p>
               </div>
 
               <div className="admin-toggle-cards-grid">
@@ -379,8 +402,12 @@ export default function SettingsEditor() {
                   onClick={() => update('exifOnHover', settings.exifOnHover === false)}
                 >
                   <div className="toggle-card-info">
-                    <span className="toggle-card-title"><Icons.IconCamera size={16} /> EXIF Data on Hover</span>
-                    <span className="toggle-card-desc">Display camera gear, lens, aperture &amp; shutter speed on hover</span>
+                    <span className="toggle-card-title">
+                      <Icons.IconCamera size={16} /> EXIF Data on Hover
+                    </span>
+                    <span className="toggle-card-desc">
+                      Display camera gear, lens, aperture &amp; shutter speed on hover
+                    </span>
                   </div>
                   <div className={`switch-toggle ${settings.exifOnHover !== false ? 'on' : ''}`}>
                     <span className="switch-slider" />
@@ -393,8 +420,12 @@ export default function SettingsEditor() {
                   onClick={() => update('map', !settings.map)}
                 >
                   <div className="toggle-card-info">
-                    <span className="toggle-card-title"><Icons.IconMap size={16} /> Interactive GPS Map</span>
-                    <span className="toggle-card-desc">Enable /map view showing photo locations on a world map</span>
+                    <span className="toggle-card-title">
+                      <Icons.IconMap size={16} /> Interactive GPS Map
+                    </span>
+                    <span className="toggle-card-desc">
+                      Enable /map view showing photo locations on a world map
+                    </span>
                   </div>
                   <div className={`switch-toggle ${settings.map === true ? 'on' : ''}`}>
                     <span className="switch-slider" />
@@ -407,8 +438,12 @@ export default function SettingsEditor() {
                   onClick={() => update('transitions', settings.transitions === false)}
                 >
                   <div className="toggle-card-info">
-                    <span className="toggle-card-title"><Icons.IconSparkles size={16} /> Smooth Page Transitions</span>
-                    <span className="toggle-card-desc">Enable subtle fade-in animations between page navigation</span>
+                    <span className="toggle-card-title">
+                      <Icons.IconSparkles size={16} /> Smooth Page Transitions
+                    </span>
+                    <span className="toggle-card-desc">
+                      Enable subtle fade-in animations between page navigation
+                    </span>
                   </div>
                   <div className={`switch-toggle ${settings.transitions !== false ? 'on' : ''}`}>
                     <span className="switch-slider" />
@@ -421,8 +456,12 @@ export default function SettingsEditor() {
                   onClick={() => update('analytics', settings.analytics === false)}
                 >
                   <div className="toggle-card-info">
-                    <span className="toggle-card-title"><Icons.IconBarChart size={16} /> Analytics Tracking</span>
-                    <span className="toggle-card-desc">Collect anonymous privacy-friendly visit statistics</span>
+                    <span className="toggle-card-title">
+                      <Icons.IconBarChart size={16} /> Analytics Tracking
+                    </span>
+                    <span className="toggle-card-desc">
+                      Collect anonymous privacy-friendly visit statistics
+                    </span>
                   </div>
                   <div className={`switch-toggle ${settings.analytics !== false ? 'on' : ''}`}>
                     <span className="switch-slider" />
@@ -435,10 +474,35 @@ export default function SettingsEditor() {
                   onClick={() => update('proofing.enabled', settings.proofing?.enabled === false)}
                 >
                   <div className="toggle-card-info">
-                    <span className="toggle-card-title"><Icons.IconHeart size={16} /> Client Proofing &amp; Favorites</span>
-                    <span className="toggle-card-desc">Allow visitors &amp; clients to heart, filter, and export favorite photo selections</span>
+                    <span className="toggle-card-title">
+                      <Icons.IconHeart size={16} /> Client Proofing &amp; Favorites
+                    </span>
+                    <span className="toggle-card-desc">
+                      Allow visitors &amp; clients to heart, filter, and export favorite photo
+                      selections
+                    </span>
                   </div>
-                  <div className={`switch-toggle ${settings.proofing?.enabled !== false ? 'on' : ''}`}>
+                  <div
+                    className={`switch-toggle ${settings.proofing?.enabled !== false ? 'on' : ''}`}
+                  >
+                    <span className="switch-slider" />
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className={`admin-toggle-card ${settings.blog?.enabled === true ? 'active' : ''}`}
+                  onClick={() => update('blog.enabled', settings.blog?.enabled !== true)}
+                >
+                  <div className="toggle-card-info">
+                    <span className="toggle-card-title">
+                      <Icons.IconBlog size={16} /> Blog
+                    </span>
+                    <span className="toggle-card-desc">
+                      Add a journal/blog section with rich-text posts to your portfolio
+                    </span>
+                  </div>
+                  <div className={`switch-toggle ${settings.blog?.enabled === true ? 'on' : ''}`}>
                     <span className="switch-slider" />
                   </div>
                 </button>
@@ -449,15 +513,25 @@ export default function SettingsEditor() {
           {activeSection === 'theme' && (
             <div className="settings-panel theme-settings-panel">
               <div className="settings-section-header">
-                <h3><Icons.IconPalette size={18} /> Theme Presets &amp; Color Mode</h3>
-                <p className="settings-section-sub">Choose a typography preset and preview in Light or Dark mode.</p>
+                <h3>
+                  <Icons.IconPalette size={18} /> Theme Presets &amp; Color Mode
+                </h3>
+                <p className="settings-section-sub">
+                  Choose a typography preset and preview in Light or Dark mode.
+                </p>
               </div>
 
               <div className="admin-field">
                 <label>Preset</label>
                 <div className="preset-card-grid">
                   {PRESETS.map((p) => {
-                    const info = THEME_INFO[p] || { label: p, desc: '', bg: '#fff', tile: '#eee', accent: '#333' };
+                    const info = THEME_INFO[p] || {
+                      label: p,
+                      desc: '',
+                      bg: '#fff',
+                      tile: '#eee',
+                      accent: '#333',
+                    };
                     const isActive = (settings.theme?.preset || 'studio') === p;
                     return (
                       <button
@@ -469,8 +543,16 @@ export default function SettingsEditor() {
                       >
                         <div className="preset-card-preview" style={{ backgroundColor: info.bg }}>
                           <div className="mini-header">
-                            <span className="mini-dot" style={{ backgroundColor: info.accent }}></span>
-                            <span className="mini-line" style={{ backgroundColor: isActive ? info.accent : 'var(--admin-border)' }}></span>
+                            <span
+                              className="mini-dot"
+                              style={{ backgroundColor: info.accent }}
+                            ></span>
+                            <span
+                              className="mini-line"
+                              style={{
+                                backgroundColor: isActive ? info.accent : 'var(--admin-border)',
+                              }}
+                            ></span>
                           </div>
                           <div className="mini-grid">
                             <div className="mini-tile" style={{ backgroundColor: info.tile }}></div>
@@ -490,8 +572,17 @@ export default function SettingsEditor() {
 
               <div className="admin-field">
                 <label>Color Mode</label>
-                <p style={{ fontSize: '0.78rem', color: 'var(--admin-text-muted)', margin: '0.25rem 0 0.6rem', lineHeight: '1.4' }}>
-                  Presets like <strong>Editorial</strong>, <strong>Minimal</strong> &amp; <strong>Classic</strong> feature warm light/cream backgrounds in Light Mode and charcoal in Dark Mode.
+                <p
+                  style={{
+                    fontSize: '0.78rem',
+                    color: 'var(--admin-text-muted)',
+                    margin: '0.25rem 0 0.6rem',
+                    lineHeight: '1.4',
+                  }}
+                >
+                  Presets like <strong>Editorial</strong>, <strong>Minimal</strong> &amp;{' '}
+                  <strong>Classic</strong> feature warm light/cream backgrounds in Light Mode and
+                  charcoal in Dark Mode.
                 </p>
                 <div className="segmented-control">
                   <button
@@ -514,8 +605,12 @@ export default function SettingsEditor() {
               <div className="settings-section-divider" />
 
               <div className="settings-section-header">
-                <h3><Icons.IconTarget size={18} /> Accent Color</h3>
-                <p className="settings-section-sub">Pick a primary accent color for links, buttons, and highlights.</p>
+                <h3>
+                  <Icons.IconTarget size={18} /> Accent Color
+                </h3>
+                <p className="settings-section-sub">
+                  Pick a primary accent color for links, buttons, and highlights.
+                </p>
               </div>
 
               <div className="admin-field">
@@ -530,7 +625,9 @@ export default function SettingsEditor() {
                       { hex: '#ffffff', name: 'Monochrome White' },
                       { hex: '#000000', name: 'Obsidian Black' },
                     ].map((swatch) => {
-                      const isSelected = (settings.theme?.accent || '#e60012').toLowerCase() === swatch.hex.toLowerCase();
+                      const isSelected =
+                        (settings.theme?.accent || '#e60012').toLowerCase() ===
+                        swatch.hex.toLowerCase();
                       return (
                         <button
                           key={swatch.hex}
@@ -562,8 +659,12 @@ export default function SettingsEditor() {
               <div className="settings-section-divider" />
 
               <div className="settings-section-header">
-                <h3><Icons.IconFrame size={18} /> Photo Frame &amp; Layout</h3>
-                <p className="settings-section-sub">Customize image presentation borders and hero layouts.</p>
+                <h3>
+                  <Icons.IconFrame size={18} /> Photo Frame &amp; Layout
+                </h3>
+                <p className="settings-section-sub">
+                  Customize image presentation borders and hero layouts.
+                </p>
               </div>
 
               <div className="admin-field">
@@ -572,7 +673,10 @@ export default function SettingsEditor() {
                   {PHOTO_FRAMES.map((f) => {
                     const info = {
                       none: { label: 'None', desc: 'Flush image with crisp edges' },
-                      passepartout: { label: 'Passepartout', desc: 'Classic gallery matting border' },
+                      passepartout: {
+                        label: 'Passepartout',
+                        desc: 'Classic gallery matting border',
+                      },
                       shadow: { label: 'Shadow', desc: 'Soft floating drop shadow' },
                     }[f] || { label: f, desc: '' };
                     const isActive = (settings.theme?.photoFrame || 'none') === f;
@@ -685,8 +789,12 @@ export default function SettingsEditor() {
               <div className="settings-section-divider" />
 
               <div className="settings-section-header">
-                <h3><Icons.IconSparkles size={18} /> Finishing Touches</h3>
-                <p className="settings-section-sub">Enable optional visual effects and indicators.</p>
+                <h3>
+                  <Icons.IconSparkles size={18} /> Finishing Touches
+                </h3>
+                <p className="settings-section-sub">
+                  Enable optional visual effects and indicators.
+                </p>
               </div>
 
               <div className="admin-toggle-cards-grid">
@@ -696,8 +804,12 @@ export default function SettingsEditor() {
                   onClick={() => update('theme.grain', !settings.theme?.grain)}
                 >
                   <div className="toggle-card-info">
-                    <span className="toggle-card-title"><Icons.IconFilm size={16} /> Film Grain Texture</span>
-                    <span className="toggle-card-desc">Adds analog noise overlay across portfolio background</span>
+                    <span className="toggle-card-title">
+                      <Icons.IconFilm size={16} /> Film Grain Texture
+                    </span>
+                    <span className="toggle-card-desc">
+                      Adds analog noise overlay across portfolio background
+                    </span>
                   </div>
                   <div className={`switch-toggle ${settings.theme?.grain === true ? 'on' : ''}`}>
                     <span className="switch-slider" />
@@ -710,10 +822,16 @@ export default function SettingsEditor() {
                   onClick={() => update('theme.headerDot', settings.theme?.headerDot === false)}
                 >
                   <div className="toggle-card-info">
-                    <span className="toggle-card-title"><Icons.IconTarget size={16} /> Header Accent Dot</span>
-                    <span className="toggle-card-desc">Displays accent dot next to active section header</span>
+                    <span className="toggle-card-title">
+                      <Icons.IconTarget size={16} /> Header Accent Dot
+                    </span>
+                    <span className="toggle-card-desc">
+                      Displays accent dot next to active section header
+                    </span>
                   </div>
-                  <div className={`switch-toggle ${settings.theme?.headerDot !== false ? 'on' : ''}`}>
+                  <div
+                    className={`switch-toggle ${settings.theme?.headerDot !== false ? 'on' : ''}`}
+                  >
                     <span className="switch-slider" />
                   </div>
                 </button>
@@ -724,8 +842,12 @@ export default function SettingsEditor() {
           {activeSection === 'grid' && (
             <div className="settings-panel">
               <div className="settings-section-header">
-                <h3><Icons.IconGrid size={18} /> Grid &amp; Layout Engine</h3>
-                <p className="settings-section-sub">Configure photography gallery column structures and thumbnail aspect ratios.</p>
+                <h3>
+                  <Icons.IconGrid size={18} /> Grid &amp; Layout Engine
+                </h3>
+                <p className="settings-section-sub">
+                  Configure photography gallery column structures and thumbnail aspect ratios.
+                </p>
               </div>
 
               <div className="admin-field">
@@ -733,11 +855,23 @@ export default function SettingsEditor() {
                 <div className="preset-card-grid">
                   {LAYOUTS.map((l) => {
                     const info = {
-                      masonry: { label: 'Masonry', desc: 'Dynamic pinterest-style staggered columns' },
+                      masonry: {
+                        label: 'Masonry',
+                        desc: 'Dynamic pinterest-style staggered columns',
+                      },
                       uniform: { label: 'Uniform Grid', desc: 'Clean equal aspect ratio grid' },
-                      showcase: { label: 'Showcase', desc: 'Featured hero photos mixed with smaller tiles' },
-                      filmstrip: { label: 'Filmstrip', desc: 'Horizontal scrollable film strip timeline' },
-                      'editorial-flow': { label: 'Editorial Flow', desc: 'Magazine story layout with varying photo sizes' },
+                      showcase: {
+                        label: 'Showcase',
+                        desc: 'Featured hero photos mixed with smaller tiles',
+                      },
+                      filmstrip: {
+                        label: 'Filmstrip',
+                        desc: 'Horizontal scrollable film strip timeline',
+                      },
+                      'editorial-flow': {
+                        label: 'Editorial Flow',
+                        desc: 'Magazine story layout with varying photo sizes',
+                      },
                     }[l] || { label: l, desc: '' };
                     const isActive = (settings.grid?.layout || 'masonry') === l;
 
@@ -752,32 +886,53 @@ export default function SettingsEditor() {
                           <div className={`mini-layout-demo layout-demo-${l}`}>
                             {l === 'masonry' && (
                               <div className="demo-masonry-col-group">
-                                <div className="demo-col"><div className="demo-tile h-high" /><div className="demo-tile h-low" /></div>
-                                <div className="demo-col"><div className="demo-tile h-low" /><div className="demo-tile h-high" /></div>
-                                <div className="demo-col"><div className="demo-tile h-med" /><div className="demo-tile h-med" /></div>
+                                <div className="demo-col">
+                                  <div className="demo-tile h-high" />
+                                  <div className="demo-tile h-low" />
+                                </div>
+                                <div className="demo-col">
+                                  <div className="demo-tile h-low" />
+                                  <div className="demo-tile h-high" />
+                                </div>
+                                <div className="demo-col">
+                                  <div className="demo-tile h-med" />
+                                  <div className="demo-tile h-med" />
+                                </div>
                               </div>
                             )}
                             {l === 'uniform' && (
                               <div className="demo-uniform-grid">
-                                <div className="demo-tile" /><div className="demo-tile" /><div className="demo-tile" />
-                                <div className="demo-tile" /><div className="demo-tile" /><div className="demo-tile" />
+                                <div className="demo-tile" />
+                                <div className="demo-tile" />
+                                <div className="demo-tile" />
+                                <div className="demo-tile" />
+                                <div className="demo-tile" />
+                                <div className="demo-tile" />
                               </div>
                             )}
                             {l === 'showcase' && (
                               <div className="demo-showcase-grid">
                                 <div className="demo-tile hero-tile" />
-                                <div className="demo-col"><div className="demo-tile" /><div className="demo-tile" /></div>
+                                <div className="demo-col">
+                                  <div className="demo-tile" />
+                                  <div className="demo-tile" />
+                                </div>
                               </div>
                             )}
                             {l === 'filmstrip' && (
                               <div className="demo-filmstrip-row">
-                                <div className="demo-tile strip" /><div className="demo-tile strip" /><div className="demo-tile strip" />
+                                <div className="demo-tile strip" />
+                                <div className="demo-tile strip" />
+                                <div className="demo-tile strip" />
                               </div>
                             )}
                             {l === 'editorial-flow' && (
                               <div className="demo-editorial-flow">
                                 <div className="demo-tile wide" />
-                                <div className="demo-row"><div className="demo-tile" /><div className="demo-tile" /></div>
+                                <div className="demo-row">
+                                  <div className="demo-tile" />
+                                  <div className="demo-tile" />
+                                </div>
                               </div>
                             )}
                           </div>
@@ -801,7 +956,10 @@ export default function SettingsEditor() {
                       '3/2': { label: 'Landscape (3:2)', desc: 'Standard 35mm DSLR landscape' },
                       '2/3': { label: 'Portrait (2:3)', desc: 'Vertical portrait orientation' },
                       '16/9': { label: 'Cinema (16:9)', desc: 'Widescreen 16:9 cinematic ratio' },
-                      auto: { label: 'Original Auto', desc: 'Uncropped original image proportions' },
+                      auto: {
+                        label: 'Original Auto',
+                        desc: 'Uncropped original image proportions',
+                      },
                     }[r] || { label: r, desc: '' };
                     const isActive = (settings.grid?.aspectRatio || '1') === r;
 
@@ -830,7 +988,9 @@ export default function SettingsEditor() {
               <div className="settings-section-divider" />
 
               <div className="settings-section-header">
-                <h3><Icons.IconColumns size={18} /> Spacing &amp; Columns</h3>
+                <h3>
+                  <Icons.IconColumns size={18} /> Spacing &amp; Columns
+                </h3>
                 <p className="settings-section-sub">Adjust column counts and grid gap spacing.</p>
               </div>
 
@@ -862,8 +1022,12 @@ export default function SettingsEditor() {
           {activeSection === 'footer' && (
             <div className="settings-panel">
               <div className="settings-section-header">
-                <h3><Icons.IconLink size={18} /> Footer &amp; Social Links</h3>
-                <p className="settings-section-sub">Display branding, Instagram, email and website links in portfolio footer.</p>
+                <h3>
+                  <Icons.IconLink size={18} /> Footer &amp; Social Links
+                </h3>
+                <p className="settings-section-sub">
+                  Display branding, Instagram, email and website links in portfolio footer.
+                </p>
               </div>
 
               <div className="admin-field">
@@ -906,8 +1070,13 @@ export default function SettingsEditor() {
           {activeSection === 'legal' && (
             <div className="settings-panel">
               <div className="settings-section-header">
-                <h3><Icons.IconScale size={18} /> Legal Notice &amp; Impressum</h3>
-                <p className="settings-section-sub">Configure required legal disclosure page for EU / German Telemediengesetz compliance.</p>
+                <h3>
+                  <Icons.IconScale size={18} /> Legal Notice &amp; Impressum
+                </h3>
+                <p className="settings-section-sub">
+                  Configure required legal disclosure page for EU / German Telemediengesetz
+                  compliance.
+                </p>
               </div>
 
               <div className="admin-toggle-cards-grid" style={{ marginBottom: '1.25rem' }}>
@@ -917,8 +1086,12 @@ export default function SettingsEditor() {
                   onClick={() => update('legal.enabled', !settings.legal?.enabled)}
                 >
                   <div className="toggle-card-info">
-                    <span className="toggle-card-title"><Icons.IconFileText size={16} /> Enable Impressum Page (/impressum)</span>
-                    <span className="toggle-card-desc">Automatically generates and links /impressum in footer</span>
+                    <span className="toggle-card-title">
+                      <Icons.IconFileText size={16} /> Enable Impressum Page (/impressum)
+                    </span>
+                    <span className="toggle-card-desc">
+                      Automatically generates and links /impressum in footer
+                    </span>
                   </div>
                   <div className={`switch-toggle ${settings.legal?.enabled === true ? 'on' : ''}`}>
                     <span className="switch-slider" />
@@ -999,14 +1172,20 @@ export default function SettingsEditor() {
           {activeSection === 'seo' && (
             <div className="settings-panel">
               <div className="settings-section-header">
-                <h3><Icons.IconSearch size={18} /> Search Engine Optimization (SEO)</h3>
-                <p className="settings-section-sub">Customize search engine metadata, OpenGraph tags, and indexing rules.</p>
+                <h3>
+                  <Icons.IconSearch size={18} /> Search Engine Optimization (SEO)
+                </h3>
+                <p className="settings-section-sub">
+                  Customize search engine metadata, OpenGraph tags, and indexing rules.
+                </p>
               </div>
 
               {/* Live Google Search Result Snippet Card */}
               <div className="google-snippet-preview">
                 <div className="google-snippet-header">
-                  <span><Icons.IconGlobe size={14} /> Google Search Result Preview</span>
+                  <span>
+                    <Icons.IconGlobe size={14} /> Google Search Result Preview
+                  </span>
                 </div>
                 <div className="google-snippet-card">
                   <div className="google-snippet-url">
@@ -1016,7 +1195,9 @@ export default function SettingsEditor() {
                     {settings.seo?.title || settings.title || 'My Photography Portfolio'}
                   </div>
                   <div className="google-snippet-desc">
-                    {settings.seo?.description || settings.subtitle || 'A curated selection of photography work.'}
+                    {settings.seo?.description ||
+                      settings.subtitle ||
+                      'A curated selection of photography work.'}
                   </div>
                 </div>
               </div>
@@ -1038,7 +1219,8 @@ export default function SettingsEditor() {
                   placeholder={`%s | ${settings.seo?.title || settings.title || 'My Portfolio'}`}
                 />
                 <p style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '4px' }}>
-                  Template for subpages &amp; albums. Use <code>%s</code> as placeholder for the page title.
+                  Template for subpages &amp; albums. Use <code>%s</code> as placeholder for the
+                  page title.
                   <br />
                   <strong>Preview:</strong>{' '}
                   {(
@@ -1061,8 +1243,12 @@ export default function SettingsEditor() {
               <div className="settings-section-divider" />
 
               <div className="settings-section-header">
-                <h3><Icons.IconGlobe size={18} /> Search Crawler Directives</h3>
-                <p className="settings-section-sub">Control how Googlebot and other web crawlers index your site.</p>
+                <h3>
+                  <Icons.IconGlobe size={18} /> Search Crawler Directives
+                </h3>
+                <p className="settings-section-sub">
+                  Control how Googlebot and other web crawlers index your site.
+                </p>
               </div>
 
               <div className="admin-toggle-cards-grid">
@@ -1072,8 +1258,12 @@ export default function SettingsEditor() {
                   onClick={() => update('seo.noIndex', !settings.seo?.noIndex)}
                 >
                   <div className="toggle-card-info">
-                    <span className="toggle-card-title"><Icons.IconBan size={16} /> noindex (Hide from Google)</span>
-                    <span className="toggle-card-desc">Instructs search engines NOT to index this site in search results</span>
+                    <span className="toggle-card-title">
+                      <Icons.IconBan size={16} /> noindex (Hide from Google)
+                    </span>
+                    <span className="toggle-card-desc">
+                      Instructs search engines NOT to index this site in search results
+                    </span>
                   </div>
                   <div className={`switch-toggle ${settings.seo?.noIndex === true ? 'on' : ''}`}>
                     <span className="switch-slider" />
@@ -1086,8 +1276,12 @@ export default function SettingsEditor() {
                   onClick={() => update('seo.noFollow', !settings.seo?.noFollow)}
                 >
                   <div className="toggle-card-info">
-                    <span className="toggle-card-title"><Icons.IconLink size={16} /> nofollow (Block Link Following)</span>
-                    <span className="toggle-card-desc">Instructs search engine crawlers not to follow outgoing links</span>
+                    <span className="toggle-card-title">
+                      <Icons.IconLink size={16} /> nofollow (Block Link Following)
+                    </span>
+                    <span className="toggle-card-desc">
+                      Instructs search engine crawlers not to follow outgoing links
+                    </span>
                   </div>
                   <div className={`switch-toggle ${settings.seo?.noFollow === true ? 'on' : ''}`}>
                     <span className="switch-slider" />
@@ -1100,21 +1294,33 @@ export default function SettingsEditor() {
           {activeSection === 'security' && (
             <div className="settings-panel">
               <div className="settings-section-header">
-                <h3><Icons.IconShieldCheck size={18} /> Asset Protection &amp; Watermark</h3>
-                <p className="settings-section-sub">Configure image protection rules, right-click prevention, and watermark overlay.</p>
+                <h3>
+                  <Icons.IconShieldCheck size={18} /> Asset Protection &amp; Watermark
+                </h3>
+                <p className="settings-section-sub">
+                  Configure image protection rules, right-click prevention, and watermark overlay.
+                </p>
               </div>
 
               <div className="admin-toggle-cards-grid">
                 <button
                   type="button"
                   className={`admin-toggle-card ${settings.protection?.disableRightClick === true ? 'active' : ''}`}
-                  onClick={() => update('protection.disableRightClick', !settings.protection?.disableRightClick)}
+                  onClick={() =>
+                    update('protection.disableRightClick', !settings.protection?.disableRightClick)
+                  }
                 >
                   <div className="toggle-card-info">
-                    <span className="toggle-card-title"><Icons.IconLock size={16} /> Disable Right-Click Menu</span>
-                    <span className="toggle-card-desc">Prevents context menu on portfolio images to hinder unauthorized downloads</span>
+                    <span className="toggle-card-title">
+                      <Icons.IconLock size={16} /> Disable Right-Click Menu
+                    </span>
+                    <span className="toggle-card-desc">
+                      Prevents context menu on portfolio images to hinder unauthorized downloads
+                    </span>
                   </div>
-                  <div className={`switch-toggle ${settings.protection?.disableRightClick === true ? 'on' : ''}`}>
+                  <div
+                    className={`switch-toggle ${settings.protection?.disableRightClick === true ? 'on' : ''}`}
+                  >
                     <span className="switch-slider" />
                   </div>
                 </button>
@@ -1122,13 +1328,21 @@ export default function SettingsEditor() {
                 <button
                   type="button"
                   className={`admin-toggle-card ${settings.protection?.disableImageDrag === true ? 'active' : ''}`}
-                  onClick={() => update('protection.disableImageDrag', !settings.protection?.disableImageDrag)}
+                  onClick={() =>
+                    update('protection.disableImageDrag', !settings.protection?.disableImageDrag)
+                  }
                 >
                   <div className="toggle-card-info">
-                    <span className="toggle-card-title"><Icons.IconBan size={16} /> Disable Image Dragging</span>
-                    <span className="toggle-card-desc">Prevents visitors from dragging images off the portfolio page</span>
+                    <span className="toggle-card-title">
+                      <Icons.IconBan size={16} /> Disable Image Dragging
+                    </span>
+                    <span className="toggle-card-desc">
+                      Prevents visitors from dragging images off the portfolio page
+                    </span>
                   </div>
-                  <div className={`switch-toggle ${settings.protection?.disableImageDrag === true ? 'on' : ''}`}>
+                  <div
+                    className={`switch-toggle ${settings.protection?.disableImageDrag === true ? 'on' : ''}`}
+                  >
                     <span className="switch-slider" />
                   </div>
                 </button>
@@ -1137,8 +1351,12 @@ export default function SettingsEditor() {
               <div className="settings-section-divider" />
 
               <div className="settings-section-header">
-                <h3><Icons.IconSparkles size={18} /> Dynamic Watermark Overlay</h3>
-                <p className="settings-section-sub">Overlay copyright branding text on Lightbox images.</p>
+                <h3>
+                  <Icons.IconSparkles size={18} /> Dynamic Watermark Overlay
+                </h3>
+                <p className="settings-section-sub">
+                  Overlay copyright branding text on Lightbox images.
+                </p>
               </div>
 
               <div className="admin-toggle-cards-grid" style={{ marginBottom: '1.25rem' }}>
@@ -1148,10 +1366,16 @@ export default function SettingsEditor() {
                   onClick={() => update('watermark.enabled', !settings.watermark?.enabled)}
                 >
                   <div className="toggle-card-info">
-                    <span className="toggle-card-title"><Icons.IconFrame size={16} /> Enable Watermark</span>
-                    <span className="toggle-card-desc">Overlay copyright text on portfolio image views</span>
+                    <span className="toggle-card-title">
+                      <Icons.IconFrame size={16} /> Enable Watermark
+                    </span>
+                    <span className="toggle-card-desc">
+                      Overlay copyright text on portfolio image views
+                    </span>
                   </div>
-                  <div className={`switch-toggle ${settings.watermark?.enabled === true ? 'on' : ''}`}>
+                  <div
+                    className={`switch-toggle ${settings.watermark?.enabled === true ? 'on' : ''}`}
+                  >
                     <span className="switch-slider" />
                   </div>
                 </button>
@@ -1181,7 +1405,9 @@ export default function SettingsEditor() {
                       </select>
                     </div>
                     <div className="admin-field">
-                      <label>Opacity ({Math.round((settings.watermark?.opacity ?? 0.3) * 100)}%)</label>
+                      <label>
+                        Opacity ({Math.round((settings.watermark?.opacity ?? 0.3) * 100)}%)
+                      </label>
                       <input
                         type="range"
                         min="0.1"
@@ -1196,6 +1422,8 @@ export default function SettingsEditor() {
               )}
             </div>
           )}
+
+          {activeSection === 'blog' && <BlogEditor />}
         </div>
       </div>
     </div>

@@ -6,7 +6,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import yaml from 'js-yaml';
-import type { GalleryYaml, SettingsYaml } from '../config/schema';
+import type { GalleryYaml, SettingsYaml, BlogYaml } from '../config/schema';
 
 const CONTENT_DIR = path.join(process.cwd(), 'content');
 const MAX_BACKUPS = 10; // Keep last 10 backups per file
@@ -60,10 +60,12 @@ async function writeYamlFile(filename: string, data: unknown): Promise<void> {
   }
 
   // Generate YAML content with header comment
-  const header =
-    filename === 'gallery.yaml'
-      ? '# ── Gallery Structure (managed by Immich Folio Admin) ──────────────\n'
-      : '# ── Site Settings (managed by Immich Folio Admin) ─────────────────\n';
+  const headers: Record<string, string> = {
+    'gallery.yaml': '# ── Gallery Structure (managed by Immich Folio Admin) ──────────────\n',
+    'settings.yaml': '# ── Site Settings (managed by Immich Folio Admin) ─────────────────\n',
+    'blog.yaml': '# ── Blog Posts (managed by Immich Folio Admin) ────────────────────\n',
+  };
+  const header = headers[filename] || '';
 
   const content =
     header +
@@ -105,6 +107,22 @@ export async function writeSettingsYaml(data: SettingsYaml): Promise<void> {
   await writeYamlFile('settings.yaml', data);
 }
 
+/** Read blog.yaml and return parsed content. */
+export async function readBlogYaml(): Promise<BlogYaml | null> {
+  try {
+    const raw = await fs.readFile(path.join(CONTENT_DIR, 'blog.yaml'), 'utf8');
+    return yaml.load(raw) as BlogYaml;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
+/** Write blog.yaml. */
+export async function writeBlogYaml(data: BlogYaml): Promise<void> {
+  await writeYamlFile('blog.yaml', data);
+}
+
 /** List available backups for a file. */
 export async function listBackups(filename: string): Promise<string[]> {
   const backupDir = path.join(CONTENT_DIR, '.backups');
@@ -128,7 +146,7 @@ export async function listBackups(filename: string): Promise<string[]> {
  * readable file over content/settings.yaml — which the admin GET endpoints then
  * hand straight back.
  */
-const BACKUP_FILENAME = /^(gallery|settings)\.yaml\.[\w-]+\.(pre-restore\.)?bak$/;
+const BACKUP_FILENAME = /^(gallery|settings|blog)\.yaml\.[\w-]+\.(pre-restore\.)?bak$/;
 
 /** Restore a specific backup. */
 export async function restoreBackup(backupFilename: string): Promise<void> {

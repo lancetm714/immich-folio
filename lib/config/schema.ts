@@ -109,6 +109,7 @@ export interface AppConfig {
     enabled: boolean;
     allowMailto: boolean;
   };
+  blogEnabled: boolean;
   albumOverrides: Record<string, string>;
   albumDescriptions: Record<string, string>;
   albumPasswords: Record<string, string>;
@@ -230,6 +231,22 @@ export interface SettingsYaml {
     opacity?: number;
     position?: 'bottom-right' | 'bottom-left' | 'center';
   };
+  blog?: { enabled?: boolean };
+}
+
+export interface BlogPost {
+  slug: string;
+  title: string;
+  date: string;
+  excerpt?: string;
+  content: string;
+  coverImageId?: string;
+  tags?: string[];
+  draft?: boolean;
+}
+
+export interface BlogYaml {
+  posts: BlogPost[];
 }
 
 export function slugify(name: string): string {
