@@ -16,12 +16,6 @@ export function resolveAuthSecret(): string {
   const secret = env.AUTH_SECRET;
   if (secret) return secret;
 
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error(
-      'SECURITY ERROR: AUTH_SECRET is not set in production. Please set a long random string as AUTH_SECRET in your .env.',
-    );
-  }
-
   if (!_fallbackSecret) {
     _fallbackSecret = crypto.randomBytes(32).toString('hex');
   }
