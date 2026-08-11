@@ -15,6 +15,7 @@ interface Album {
 interface Props {
   initialApiUrl: string;
   setupToken: string;
+  adminEnabled: boolean;
 }
 
 const STEPS = ['Connect', 'Albums', 'Site', 'Finish'] as const;
@@ -29,7 +30,7 @@ const THEME_OPTIONS = [
   { value: 'monograph', label: 'Monograph', description: 'Typographic, text-first' },
 ];
 
-export function InstallWizard({ initialApiUrl, setupToken }: Props) {
+export function InstallWizard({ initialApiUrl, setupToken, adminEnabled }: Props) {
   const [step, setStep] = useState(0);
 
   // Step 1 — connection
@@ -146,7 +147,7 @@ export function InstallWizard({ initialApiUrl, setupToken }: Props) {
               <Link className="admin-btn admin-btn-primary" href="/">
                 Visit your gallery
               </Link>
-              {adminPassword && (
+              {adminEnabled && (
                 <Link className="admin-btn" href="/admin">
                   Open admin panel
                 </Link>

@@ -244,6 +244,8 @@ docker run -d \
 ```
 
 > **Note:** The `content/` volume mount lets you update `gallery.yaml` and `about.md` without rebuilding the image.
+> The install wizard writes `content/install.json` to this volume, which holds your Immich API key and the site
+> secret — backing up `content/` means backing up credentials.
 
 ### Health Check
 

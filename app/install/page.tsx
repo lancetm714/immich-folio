@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { isInstalled, getInstallCredentials, getSetupToken, validateSetupToken } from '@/lib/install';
+import { isAdminEnabled } from '@/lib/admin/auth';
 import { InstallWizard } from './InstallWizard';
 
 export const metadata: Metadata = {
@@ -61,5 +62,5 @@ export default async function InstallPage({
 
   const creds = getInstallCredentials();
 
-  return <InstallWizard initialApiUrl={creds.apiUrl} setupToken={token!} />;
+  return <InstallWizard initialApiUrl={creds.apiUrl} setupToken={token!} adminEnabled={isAdminEnabled()} />;
 }
