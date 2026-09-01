@@ -43,6 +43,7 @@ export const en = {
     entryNavAria: 'Journal entry navigation',
     loadingGallery: 'Loading gallery',
     loadingPhotos: 'Loading photos',
+    downloadAlbum: 'Download album',
   },
 
   home: {
@@ -179,6 +180,7 @@ export const en = {
     copyList: 'Copy Text List (#1, #2...)',
     listCopied: 'List Copied!',
     sendEmail: '✉️ Send Email to Photographer',
+    downloadSelected: 'Download selected (.zip)',
     clearSelection: 'Clear Selection',
     confirmClear: 'Clear all selected favorites?',
     listEmpty: (albumName: string) => `${albumName}: No photos selected.`,

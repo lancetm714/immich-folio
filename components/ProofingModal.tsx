@@ -24,9 +24,17 @@ export function ProofingModal() {
     setIsModalOpen,
     getProofingUrl,
     getFormattedList,
+    getSelectedTokens,
     clearFavorites,
     allowMailto,
+    downloadArchiveUrl,
   } = proofing;
+
+  // What the archive would actually receive. Gating on this rather than on
+  // `favorites.size` means a favourite left over from another album (they share
+  // the provider's storage key when no `albumName` is passed) can never light up
+  // a button that would post an empty selection and 404.
+  const selectedCount = getSelectedTokens().length;
 
   const handleCopyLink = () => {
     const url = getProofingUrl();
@@ -48,6 +56,31 @@ export function ProofingModal() {
     const subject = encodeURIComponent(t.proofing.mailSubject(favorites.size));
     const body = encodeURIComponent(t.proofing.mailBody(getFormattedList(), getProofingUrl()));
     window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  };
+
+  const handleDownloadSelection = () => {
+    if (!downloadArchiveUrl) return;
+    const tokens = getSelectedTokens();
+    if (tokens.length === 0) return;
+
+    // A form POST, not a fetch: the browser streams the response straight to
+    // disk, so a large selection never has to fit in memory — a phone cannot
+    // hold a whole ZIP in a blob. The route answers with
+    // `Content-Disposition: attachment`, so the page stays where it was.
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = downloadArchiveUrl;
+    form.style.display = 'none';
+    for (const token of tokens) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'assets';
+      input.value = token;
+      form.appendChild(input);
+    }
+    document.body.appendChild(form);
+    form.submit();
+    form.remove();
   };
 
   return (
@@ -124,6 +157,45 @@ export function ProofingModal() {
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {downloadArchiveUrl && (
+            <button
+              type="button"
+              onClick={handleDownloadSelection}
+              disabled={selectedCount === 0}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem',
+                padding: '0.75rem 1rem',
+                borderRadius: 'var(--radius-sm, 6px)',
+                background: 'var(--accent, #e60012)',
+                color: '#fff',
+                border: 'none',
+                fontWeight: 500,
+                cursor: selectedCount === 0 ? 'not-allowed' : 'pointer',
+                opacity: selectedCount === 0 ? 0.6 : 1,
+              }}
+            >
+              <svg
+                aria-hidden="true"
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              {t.proofing.downloadSelected}
+            </button>
+          )}
+
           <button
             type="button"
             onClick={handleCopyLink}
@@ -134,9 +206,9 @@ export function ProofingModal() {
               gap: '0.5rem',
               padding: '0.75rem 1rem',
               borderRadius: 'var(--radius-sm, 6px)',
-              background: 'var(--accent, #e60012)',
-              color: '#fff',
-              border: 'none',
+              background: 'rgba(255,255,255,0.1)',
+              color: 'inherit',
+              border: '1px solid rgba(255,255,255,0.15)',
               fontWeight: 500,
               cursor: 'pointer',
             }}

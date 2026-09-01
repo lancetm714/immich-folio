@@ -399,7 +399,13 @@ export function EssayView(props: EssayViewProps) {
   }
 
   return (
-    <ProofingProvider albumTokens={albumTokens} allowMailto={props.allowMailto ?? true}>
+    <ProofingProvider
+      albumTokens={albumTokens}
+      // The essay's own title, so its favourites do not share the provider's
+      // default key with every album (and story) on the site.
+      albumName={props.title || props.essay.frontmatter.title}
+      allowMailto={props.allowMailto ?? true}
+    >
       <EssayViewContent {...props} />
     </ProofingProvider>
   );
