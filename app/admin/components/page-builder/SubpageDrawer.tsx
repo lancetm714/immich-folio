@@ -45,6 +45,8 @@ import {
 interface SubpageDrawerProps {
   sp: Subpage;
   spIndex: number;
+  /** 1-based position among the enabled subpages; undefined while disabled. */
+  kickerIndex?: number;
   immichAlbums: ImmichAlbumInfo[];
   sensors: SensorDescriptor<SensorOptions>[];
   drawerMode: 'edit' | 'preview';
@@ -78,6 +80,7 @@ interface SubpageDrawerProps {
 export default function SubpageDrawer({
   sp,
   spIndex,
+  kickerIndex,
   immichAlbums,
   sensors,
   drawerMode,
@@ -144,7 +147,7 @@ export default function SubpageDrawer({
 
         <div className="subpage-drawer-body">
           {drawerMode === 'preview' ? (
-            <SubpagePreview sp={sp} immichAlbums={immichAlbums} />
+            <SubpagePreview sp={sp} immichAlbums={immichAlbums} index={kickerIndex} />
           ) : (
             <div className="admin-sheet-columns admin-sheet-columns--settings-aside">
               <div className="admin-sheet-col">
