@@ -639,7 +639,6 @@ export default function SettingsEditor({ section }: SettingsEditorProps) {
   // The About panel has its own route, so load its content when that section opens
   useEffect(() => {
     if (activeSection === 'about') loadAboutContent();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection]);
 
   const toggleMode = (mode: 'dark' | 'light') => {
@@ -946,6 +945,7 @@ export default function SettingsEditor({ section }: SettingsEditorProps) {
               <div className="admin-field">
                 <label>Language</label>
                 <select
+                  aria-label="Language"
                   value={settings.lang || 'en'}
                   onChange={(e) => update('lang', e.target.value)}
                 >
@@ -1209,12 +1209,13 @@ export default function SettingsEditor({ section }: SettingsEditorProps) {
               <div className="admin-field">
                 <label>Visitor Default Mode</label>
                 <select
+                  aria-label="Visitor default mode"
                   value={settings.mode || 'dark'}
                   onChange={(e) => update('mode', e.target.value)}
                 >
                   <option value="dark">Dark</option>
                   <option value="light">Light</option>
-                  <option value="auto">Follow the visitor's system</option>
+                  <option value="auto">Follow the visitor&apos;s system</option>
                 </select>
                 <p className="admin-field-hint">
                   What a first-time visitor sees. The light/dark toggle in the site header still
@@ -1880,6 +1881,7 @@ export default function SettingsEditor({ section }: SettingsEditorProps) {
                     <div className="admin-field">
                       <label>Position</label>
                       <select
+                        aria-label="Watermark position"
                         value={settings.watermark?.position || 'bottom-right'}
                         onChange={(e) => update('watermark.position', e.target.value)}
                       >

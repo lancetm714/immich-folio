@@ -1,14 +1,21 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useProofing } from './ProofingContext';
 import { IconCheck, IconCopy, IconLink } from './Icons';
 import { useDictionary } from './I18nProvider';
+import { useModalDialog } from '@/hooks/useModalDialog';
 
 export function ProofingModal() {
   const t = useDictionary();
   const proofing = useProofing();
   const [copiedState, setCopiedState] = useState<'none' | 'link' | 'list'>('none');
+
+  /* Before the early `return null`: hooks must not run conditionally.
+     `proofing` can be null, hence the optional calls. */
+  const isOpen = Boolean(proofing?.isModalOpen);
+  const close = useCallback(() => proofing?.setIsModalOpen(false), [proofing]);
+  const cardRef = useModalDialog(close, isOpen);
 
   if (!proofing || !proofing.isModalOpen) return null;
 
@@ -59,14 +66,24 @@ export function ProofingModal() {
         padding: '1rem',
       }}
     >
+      {/* This card used to read `--bg-surface` and `--border-color`, which
+          are defined nowhere, so it always fell back to the hard-coded dark
+          values. In the light theme that meant a #1e1e1e card under
+          `--text-primary`, which does exist there and resolves to #1a1a18:
+          dark text on a dark background, about 1.05:1. It now uses tokens
+          that exist. */}
       <div
         className="proofing-modal-card"
+        ref={cardRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="proofing-modal-title"
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: 'var(--bg-surface, #1e1e1e)',
+          background: 'var(--bg-card, #1e1e1e)',
           color: 'var(--text-primary, #ffffff)',
           borderRadius: 'var(--radius-md, 12px)',
-          border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
+          border: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
           padding: '1.5rem',
           maxWidth: '480px',
           width: '100%',
@@ -81,7 +98,7 @@ export function ProofingModal() {
             marginBottom: '1rem',
           }}
         >
-          <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>
+          <h3 id="proofing-modal-title" style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>
             {t.proofing.modalTitle(favorites.size)}
           </h3>
           <button
