@@ -111,7 +111,13 @@
   /* 56px header + 48px original padding */
 }
 
-/* Simple CSS Page Fade-In (Replaces Framer Motion) */
+/* Simple CSS Page Fade-In (Replaces Framer Motion).
+ *
+ * Opacity only — no `transform`. A transform on `.main` (even the identity
+ * `translateY(0)` this keyframe used to end on, which `forwards` kept applied)
+ * turns the element into the containing block for every `position: fixed`
+ * descendant, so the proofing bar and its modal were pinned to the bottom of
+ * the page instead of floating over it. */
 [data-transitions='true'] .main {
   animation: page-fade-in 0.5s ease-out forwards;
 }
@@ -119,12 +125,10 @@
 @keyframes page-fade-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
   }
 
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -1120,6 +1124,25 @@
   display: none;
 }
 
+.album-header__download {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  transition: color var(--transition-fast);
+}
+
+.album-header__download:hover {
+  color: var(--text-primary);
+}
+
+.album-header__download svg {
+  width: 15px;
+  height: 15px;
+}
+
 .photo-grid {
   /* The gap the grid uses when settings.yaml does not set one. Declared rather
      than left to each layout's own `var(--grid-gap, N)` fallback, because those
@@ -1516,13 +1539,14 @@
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.1em;
+  /* --text-muted is already the quietest colour that clears 4.5:1; an extra
+     opacity on top halved that to about 2:1 in every light preset. */
   color: var(--text-muted);
-  opacity: 0.5;
-  transition: opacity var(--transition-fast);
+  transition: color var(--transition-fast);
 }
 
 .footer__legal-link:hover {
-  opacity: 1;
+  color: var(--text-primary);
 }
 
 .footer__links {

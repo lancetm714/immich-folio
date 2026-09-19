@@ -106,7 +106,12 @@ export function JournalStudio({ slug: activeSlug }: JournalStudioProps) {
   };
 
   const handleDelete = async (slug: string) => {
-    if (!confirm(`Are you sure you want to delete "${slug}"?`)) return;
+    if (
+      !confirm(
+        `Delete "${slug}"?\n\nA copy is kept and can be restored from Backups on the dashboard.`,
+      )
+    )
+      return;
 
     try {
       const res = await fetch(`/api/admin/journal/${slug}`, {
@@ -812,6 +817,7 @@ function JournalEditor({ slug, onBack }: JournalEditorProps) {
                       {block.type === 'heading' && (
                         <div className="journal-heading-row">
                           <select
+                            aria-label="Heading level"
                             className="admin-input journal-level-select"
                             value={block.level}
                             onChange={(e) =>
@@ -918,6 +924,7 @@ function JournalEditor({ slug, onBack }: JournalEditorProps) {
                           >
                             <div className="journal-photo-layout-row">
                               <select
+                                aria-label="Photo layout"
                                 className="admin-input"
                                 value={block.layout}
                                 onChange={(e) =>

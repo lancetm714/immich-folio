@@ -266,9 +266,9 @@ function PhotoGridInner({
             gap: '12px',
             padding: '8px 16px',
             borderRadius: '30px',
-            background: 'var(--bg-surface, #1e1e1e)',
+            background: 'var(--bg-card, #1e1e1e)',
             color: 'var(--text-primary, #ffffff)',
-            border: '1px solid var(--border-color, rgba(255,255,255,0.15))',
+            border: '1px solid var(--border-subtle, rgba(255,255,255,0.15))',
             boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
             backdropFilter: 'blur(8px)',
           }}
@@ -279,8 +279,8 @@ function PhotoGridInner({
             style={{
               background: proofing.isFilterActive
                 ? 'var(--accent, #e60012)'
-                : 'rgba(255,255,255,0.15)',
-              color: '#fff',
+                : 'var(--bg-card-hover)',
+              color: proofing.isFilterActive ? '#fff' : 'var(--text-primary)',
               border: 'none',
               padding: '6px 14px',
               borderRadius: '20px',

@@ -7,6 +7,7 @@ import { ProofingProvider, useProofing } from '@/components/ProofingContext';
 import { ProofingModal } from '@/components/ProofingModal';
 import { FadeIn } from '@/components/FadeIn';
 import type { ParsedEssay, EssayBlock } from '@/lib/essay';
+import { renderInlineMarkdown } from '@/lib/essay';
 import type { PhotoItem } from './PhotoGrid';
 import './essay.css';
 import { useDictionary } from '@/components/I18nProvider';
@@ -78,7 +79,15 @@ function EssayViewContent({
         return (
           <blockquote key={idx} className="essay-quote">
             <div dangerouslySetInnerHTML={{ __html: block.text }} />
-            {block.author && <span className="essay-quote__author">— {block.author}</span>}
+            {block.author && (
+              <span
+                className="essay-quote__author"
+                // The attribution keeps its Markdown and is rendered here, like
+                // the quote body, so `[link](…)` becomes an anchor (#559).
+                // renderInlineMarkdown escapes everything it does not emit.
+                dangerouslySetInnerHTML={{ __html: `— ${renderInlineMarkdown(block.author)}` }}
+              />
+            )}
           </blockquote>
         );
 
@@ -312,9 +321,9 @@ function EssayViewContent({
             gap: '12px',
             padding: '8px 16px',
             borderRadius: '30px',
-            background: 'var(--bg-surface, #1e1e1e)',
+            background: 'var(--bg-card, #1e1e1e)',
             color: 'var(--text-primary, #ffffff)',
-            border: '1px solid var(--border-color, rgba(255,255,255,0.15))',
+            border: '1px solid var(--border-subtle, rgba(255,255,255,0.15))',
             boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
             backdropFilter: 'blur(8px)',
           }}
@@ -325,8 +334,8 @@ function EssayViewContent({
             style={{
               background: proofing.isFilterActive
                 ? 'var(--accent, #e60012)'
-                : 'rgba(255,255,255,0.15)',
-              color: '#fff',
+                : 'var(--bg-card-hover)',
+              color: proofing.isFilterActive ? '#fff' : 'var(--text-primary)',
               border: 'none',
               padding: '6px 14px',
               borderRadius: '20px',

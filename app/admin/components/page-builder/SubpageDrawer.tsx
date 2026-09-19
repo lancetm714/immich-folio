@@ -45,6 +45,8 @@ import {
 interface SubpageDrawerProps {
   sp: Subpage;
   spIndex: number;
+  /** 1-based position among the enabled subpages; undefined while disabled. */
+  kickerIndex?: number;
   immichAlbums: ImmichAlbumInfo[];
   sensors: SensorDescriptor<SensorOptions>[];
   drawerMode: 'edit' | 'preview';
@@ -64,6 +66,8 @@ interface SubpageDrawerProps {
   getAlbumName: (id: string) => string;
   getAlbumCount: (id: string) => number;
   getAlbumThumbnailId: (id: string) => string | null;
+  /** Album to mark, when the sheet was opened from a diagnostics link. */
+  highlightedAlbumId?: string | null;
 }
 
 /**
@@ -76,6 +80,7 @@ interface SubpageDrawerProps {
 export default function SubpageDrawer({
   sp,
   spIndex,
+  kickerIndex,
   immichAlbums,
   sensors,
   drawerMode,
@@ -95,6 +100,7 @@ export default function SubpageDrawer({
   getAlbumName,
   getAlbumCount,
   getAlbumThumbnailId,
+  highlightedAlbumId,
 }: SubpageDrawerProps) {
   return (
     <div className="subpage-drawer-backdrop" onClick={() => onClose()}>
@@ -141,7 +147,7 @@ export default function SubpageDrawer({
 
         <div className="subpage-drawer-body">
           {drawerMode === 'preview' ? (
-            <SubpagePreview sp={sp} immichAlbums={immichAlbums} />
+            <SubpagePreview sp={sp} immichAlbums={immichAlbums} index={kickerIndex} />
           ) : (
             <div className="admin-sheet-columns admin-sheet-columns--settings-aside">
               <div className="admin-sheet-col">
@@ -300,6 +306,7 @@ export default function SubpageDrawer({
                   <div className="admin-field" style={{ marginTop: '1rem' }}>
                     <label>Page Layout Style</label>
                     <select
+                      aria-label="Page layout style"
                       value={sp.grid?.layout || 'masonry'}
                       onChange={(e) => {
                         const newLayout = e.target.value;
@@ -446,6 +453,7 @@ export default function SubpageDrawer({
                               name={getAlbumName(album.id)}
                               count={getAlbumCount(album.id)}
                               thumbnailId={getAlbumThumbnailId(album.id)}
+                              highlighted={album.id === highlightedAlbumId}
                               onRemove={() => removeSubpageAlbum(spIndex, aIndex)}
                               onEdit={() =>
                                 onEditAlbum({
@@ -506,6 +514,7 @@ export default function SubpageDrawer({
                               name={getAlbumName(album.id)}
                               count={getAlbumCount(album.id)}
                               thumbnailId={getAlbumThumbnailId(album.id)}
+                              highlighted={album.id === highlightedAlbumId}
                               onRemove={() => removeSectionAlbum(spIndex, secIndex, aIndex)}
                               onEdit={() =>
                                 onEditAlbum({

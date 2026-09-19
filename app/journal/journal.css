@@ -42,13 +42,18 @@
   gap: 2.5rem;
 }
 
+/* These rules used to read `--surface`, `--surface-subtle` and `--border`,
+   none of which exist, so the cards always took their fallbacks: white veils
+   of 3% (background) and 8% (border). Right on a dark background; in the
+   light theme the card could not be told apart from the page and had no
+   visible edge. */
 .journal-card {
   display: flex;
   flex-direction: column;
   text-decoration: none;
   color: inherit;
-  background: var(--surface, rgba(255, 255, 255, 0.03));
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  background: var(--bg-card, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
   border-radius: 12px;
   overflow: hidden;
   transition:
@@ -67,7 +72,7 @@
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 10;
-  background: var(--surface-subtle, rgba(255, 255, 255, 0.02));
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.02));
   overflow: hidden;
 }
 
@@ -143,7 +148,7 @@
   align-items: center;
   justify-content: space-between;
   padding-top: 1rem;
-  border-top: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
   font-size: 0.8rem;
   font-weight: 500;
 }

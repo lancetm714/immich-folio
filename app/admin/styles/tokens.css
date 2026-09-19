@@ -15,14 +15,24 @@
   --admin-bg-input: #161616;
   --admin-border: #2e2e2e;
   --admin-border-hover: #444444;
-  --admin-border-focus: #666666;
+  --admin-border-focus: #777777;
   --admin-text: #f0f0f0;
   --admin-text-secondary: #a0a0a0;
   --admin-text-muted: #707070;
   --admin-accent: #f59e0b;
+  /* Focus used to show only as a border colour change from #2e2e2e to
+     #666666, a contrast of 2.37:1 where WCAG 1.4.11 asks for 3:1 against
+     adjacent colours, so keyboard users could barely see where they were.
+     The border value now clears 3:1, and a real ring comes on top: the
+     accent sits at 8.8:1 on the dark background. */
+  --admin-focus-ring: 2px solid var(--admin-accent);
   /* One height for every control in the header row. */
   --admin-control-height: 36px;
   --admin-success: #4ade80;
+  /* Warnings get their own token rather than the accent: a preset may recolour
+     the accent (studio-modern makes it red), and a warning must not read as an
+     error because of the theme. */
+  --admin-warning: #f59e0b;
   --admin-error: #f87171;
   --admin-error-bg: #2d1111;
   --admin-error-border: #5c2020;
@@ -40,12 +50,13 @@
   --admin-bg-input: #ffffff;
   --admin-border: #e0e0e0;
   --admin-border-hover: #c0c0c0;
-  --admin-border-focus: #999999;
+  --admin-border-focus: #7f7f7f;
   --admin-text: #1a1a1a;
   --admin-text-secondary: #555555;
   --admin-text-muted: #888888;
   --admin-accent: #d97706;
   --admin-success: #16a34a;
+  --admin-warning: #b45309;
   --admin-error: #dc2626;
   --admin-error-bg: #fef2f2;
   --admin-error-border: #fecaca;

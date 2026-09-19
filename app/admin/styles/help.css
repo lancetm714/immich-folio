@@ -105,10 +105,13 @@
   transition: all 0.15s;
 }
 
-.builder-search-input:focus {
-  outline: none;
+/* The only field that already got this right (accent border plus shadow).
+   It moves to the same ring as every other field, so focus looks the same
+   throughout the admin panel. */
+.builder-search-input:focus-visible {
+  outline: var(--admin-focus-ring);
+  outline-offset: 1px;
   border-color: var(--admin-accent);
-  box-shadow: 0 0 0 1px var(--admin-accent);
   background: var(--admin-bg);
 }
 

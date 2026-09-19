@@ -153,20 +153,26 @@ View counts per page and album, read from `content/analytics.json`. No cookies, 
 
 ## Backups
 
-Every time you save, the previous file is backed up automatically:
+Every time you save, the previous file is backed up automatically. Deleting a
+journal entry keeps a copy too:
 
 ```
 content/.backups/
 ├── gallery.yaml.2026-05-29T14-30-00-000Z.bak
 ├── settings.yaml.2026-05-29T14-30-00-000Z.bak
+├── about.md.2026-05-29T14-30-00-000Z.bak
 └── ...
 content/journal/.backups/
-└── my-story.md.2026-05-29T14-30-00-000Z.bak
+├── my-story.md.2026-05-29T14-30-00-000Z.bak
+└── old-trip.md.2026-05-30T09-12-00-000Z.deleted.bak
 ```
 
 - Up to **10 backups** per file are retained (oldest are pruned)
-- The **Backup Manager** lists them and restores any one with a single click
+- The **Backup Manager** (dashboard) has a tab each for gallery, settings, about
+  and journal, and restores any backup with a single click — a deleted journal
+  entry comes back under its old slug
 - Before a restore, a `*.pre-restore.bak` snapshot is created
+- `*.deleted.bak` and `*.pre-restore.bak` snapshots are never pruned
 - All writes are **atomic** (write to temp file, then rename) — no risk of a half-written YAML
 
 ## Docker Usage
@@ -198,7 +204,11 @@ This is useful after making external changes to config files or when Immich data
 
 ### Diagnostics
 
-The panel reports the health of the installation: whether Immich answers, whether `gallery.yaml` and `settings.yaml` parse, the number of cached entries, and the backup count with the timestamp of the most recent one. `settings.yaml` is optional, so its absence is not a fault — only a file that exists and cannot be parsed counts as invalid. A check that could not run (an expired session, for example) is reported as such rather than as an outage.
+The status badge in the header opens a short summary: whether Immich answers, whether `gallery.yaml` and `settings.yaml` parse, the number of cached entries, and the backup count with the timestamp of the most recent one. `settings.yaml` is optional, so its absence is not a fault — only a file that exists and cannot be parsed counts as invalid. A check that could not run (an expired session, for example) is reported as such rather than as an outage.
+
+Its **Diagnostics** button leads to the full page at `/admin/diagnostics`. Anything that wants a look is listed first; the checks that passed follow, grouped into connection, security and content. Each finding that wants a look links to where it is fixed — a finding about one album opens the subpage it is published on (or, for a standalone album, the album itself). The page also manages backups and clears the cache, and **Copy report** puts the findings on the clipboard as Markdown, ready for a GitHub issue.
+
+It also reports **alt text**. Folio has no alt-text field of its own: the Immich description of a photo becomes its alt text, as long as **Photo Description** is switched on under Settings → General. The page counts the published photos that have no description and lists them by album, each linking to the photo in Immich. Add the description there and press **Reload**. The links use Immich's own **External domain** (Administration → Settings → Server in Immich) when it is set. Otherwise they fall back to the address Folio reaches Immich at, which is often an internal Docker name your browser cannot open. Missing alt text does not colour the status badge — most libraries have some, and a badge that is never green stops being read.
 
 Separately, while you are logged in, the public site shows a diagnostic banner on any album Immich returns empty — the case that otherwise looks like a broken page to you and to nobody else.
 
