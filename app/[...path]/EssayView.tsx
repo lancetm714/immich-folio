@@ -334,8 +334,8 @@ function EssayViewContent({
             style={{
               background: proofing.isFilterActive
                 ? 'var(--accent, #e60012)'
-                : 'rgba(255,255,255,0.15)',
-              color: '#fff',
+                : 'var(--bg-card-hover)',
+              color: proofing.isFilterActive ? '#fff' : 'var(--text-primary)',
               border: 'none',
               padding: '6px 14px',
               borderRadius: '20px',
