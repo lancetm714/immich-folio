@@ -106,6 +106,7 @@ export default function AlbumDrawer({
               <div className="admin-field">
                 <label>Layout override (Experimental)</label>
                 <select
+                  aria-label="Layout override"
                   value={album.grid?.layout || ''}
                   onChange={(e) => {
                     const layout = e.target.value || undefined;
