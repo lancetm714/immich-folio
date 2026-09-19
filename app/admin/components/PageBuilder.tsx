@@ -26,6 +26,7 @@ import SaveBar from './SaveBar';
 import AlbumDrawer from './page-builder/AlbumDrawer';
 import { SortableAlbumCard } from './page-builder/AlbumCard';
 import SubpageDrawer from './page-builder/SubpageDrawer';
+import { findAlbumAddress } from './page-builder/findAlbumAddress';
 import {
   seedCoverGrid,
   type ActiveEditAlbumAddress,
@@ -280,6 +281,8 @@ export default function PageBuilder() {
   const [editingAlbumAddress, setEditingAlbumAddress] = useState<ActiveEditAlbumAddress | null>(
     null,
   );
+  /** Album a `?album=` link pointed at, marked in its subpage sheet for a moment. */
+  const [linkedAlbumId, setLinkedAlbumId] = useState<string | null>(null);
 
   // Keep the builder still behind either drawer. One combined lock rather than
   // one per drawer: the album drawer opens from inside the subpage drawer, and
@@ -331,6 +334,26 @@ export default function PageBuilder() {
 
   useUnsavedGuard(dirty);
 
+  // A subpage opened from a `?album=` link can hold dozens of albums: bring the
+  // linked one into view, and let the mark fade after a moment. The mark itself
+  // is a prop on the tile — a class added to the DOM here would be wiped by the
+  // next render of the tile.
+  useEffect(() => {
+    if (!linkedAlbumId || expandedSubpage === null) return;
+    const frame = requestAnimationFrame(() => {
+      const tile = document.querySelector<HTMLElement>(
+        `.subpage-drawer-container [data-album-id="${window.CSS.escape(linkedAlbumId)}"]`,
+      );
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      tile?.scrollIntoView({ block: 'center', behavior: reduce ? 'auto' : 'smooth' });
+    });
+    const fade = window.setTimeout(() => setLinkedAlbumId(null), 2600);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(fade);
+    };
+  }, [linkedAlbumId, expandedSubpage]);
+
   async function loadData() {
     setLoading(true);
     try {
@@ -341,7 +364,9 @@ export default function PageBuilder() {
 
       if (galleryRes.ok) {
         const { gallery: raw } = await galleryRes.json();
-        setGallery(parseGalleryYaml(raw));
+        const parsed = parseGalleryYaml(raw);
+        setGallery(parsed);
+        openAlbumFromLink(parsed);
       }
 
       if (albumsRes.ok) {
@@ -352,6 +377,35 @@ export default function PageBuilder() {
       console.error('Failed to load admin data:', err);
     } finally {
       setLoading(false);
+    }
+  }
+
+  /**
+   * `?album=<id>` opens the place that album is published from — the
+   * diagnostics page links here from a finding about one album. That is the
+   * subpage's sheet when the album sits on a subpage: the fix for such a
+   * finding (take it off the page, or check which page shows it) lives there,
+   * not in the album's own details. A standalone album has no page, so its
+   * own drawer is the place.
+   *
+   * One-shot: the parameter is dropped once read, so a reload after closing
+   * the sheet does not open it again.
+   */
+  function openAlbumFromLink(state: GalleryState) {
+    const params = new URLSearchParams(window.location.search);
+    const albumId = params.get('album');
+    if (!albumId) return;
+    params.delete('album');
+    const query = params.toString();
+    window.history.replaceState(null, '', window.location.pathname + (query ? `?${query}` : ''));
+
+    const address = findAlbumAddress(state, albumId);
+    if (!address) return;
+    if (address.subpageIndex !== undefined) {
+      setExpandedSubpage(address.subpageIndex);
+      setLinkedAlbumId(albumId);
+    } else {
+      setEditingAlbumAddress(address);
     }
   }
 
@@ -990,7 +1044,10 @@ export default function PageBuilder() {
             sensors={sensors}
             drawerMode={drawerMode}
             onDrawerModeChange={setDrawerMode}
-            onClose={() => setExpandedSubpage(null)}
+            onClose={() => {
+              setExpandedSubpage(null);
+              setLinkedAlbumId(null);
+            }}
             updateSubpage={updateSubpage}
             removeSubpage={removeSubpage}
             addSection={addSection}
@@ -1005,6 +1062,7 @@ export default function PageBuilder() {
             getAlbumName={getAlbumName}
             getAlbumCount={getAlbumCount}
             getAlbumThumbnailId={getAlbumThumbnailId}
+            highlightedAlbumId={linkedAlbumId}
           />
         )}
       </section>
