@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { promises as fs } from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
+import { atomicWrite } from '@/lib/atomicWrite';
 
 const CONTENT_DIR = path.resolve(process.cwd(), 'content');
 const FILENAME = 'about.md';
@@ -83,15 +84,7 @@ export const PUT = withAdmin(async (request: Request) => {
     await fs.mkdir(CONTENT_DIR, { recursive: true });
   }
 
-  // ── Atomic write (temp file + rename) ───────────────────────
-  const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  try {
-    await fs.writeFile(tmpPath, content, 'utf-8');
-    await fs.rename(tmpPath, filePath);
-  } catch (err) {
-    await fs.unlink(tmpPath).catch(() => {});
-    throw err;
-  }
+  await atomicWrite(filePath, content);
 
   revalidatePath('/about', 'layout');
 
