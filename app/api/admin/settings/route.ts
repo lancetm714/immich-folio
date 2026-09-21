@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { readSettingsYaml, writeSettingsYaml } from '@/lib/admin/yaml-service';
 import { invalidateConfigCache, getConfigOrNull } from '@/lib/config';
 import { immich } from '@/lib/immich';
+import { validateSettings } from '@/lib/config/settingsSchema';
 import type { SettingsYaml } from '@/lib/config/schema';
 
 /** GET: Read current settings.yaml config. */
@@ -26,6 +27,19 @@ export const PUT = withAdmin(async (request: Request) => {
   const body = await request.json().catch(() => null);
   if (!body?.settings) {
     return NextResponse.json({ error: 'Missing settings data' }, { status: 400 });
+  }
+
+  // Checked before the write, not after: settings.yaml is read by every public
+  // page, so a malformed save is discovered by visitors rather than here.
+  const validation = validateSettings(body.settings);
+  if (!validation.ok) {
+    return NextResponse.json(
+      {
+        error: 'These settings could not be saved.',
+        fields: validation.errors,
+      },
+      { status: 400 },
+    );
   }
 
   const settings = body.settings as SettingsYaml;
