@@ -6,6 +6,7 @@ import Link from 'next/link';
 import * as Icons from './Icons';
 import SaveBar from './SaveBar';
 import { useUnsavedGuard } from './useUnsavedGuard';
+import { reportIfSessionExpired } from './sessionExpiry';
 import ToggleCard from './fields/ToggleCard';
 import OptionGrid, { toOptions } from './fields/OptionGrid';
 // Direct import from the theme module, not from '@/lib/config': the config
@@ -587,6 +588,12 @@ export default function SettingsEditor() {
     source: 'env' | 'settings' | 'none';
   } | null>(null);
   const [loading, setLoading] = useState(true);
+  /**
+   * Set when the settings could not be fetched. It blocks saving, because an
+   * empty form saved over a live settings.yaml replaces it with whatever one
+   * field the user happened to touch.
+   */
+  const [loadError, setLoadError] = useState<string | null>(null);
   // Collapsed by default: the four metadata switches are a detail of one
   // decision, and showing them permanently is what made the section a wall (#510).
   const [metadataOpen, setMetadataOpen] = useState(false);
@@ -671,15 +678,28 @@ export default function SettingsEditor() {
 
   async function loadSettings() {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await fetch('/api/admin/settings');
-      if (res.ok) {
-        const { settings: data, siteUrl } = await res.json();
-        setSettings(data || {});
-        setSiteUrlInfo(siteUrl ?? null);
+      if (!res.ok) {
+        // 401 is the common one: the session lasts 24h and nothing re-checks
+        // it, so a tab left open overnight lands here. reportIfSessionExpired
+        // also drops the whole panel back to the login screen (#596); the
+        // thrown message below still covers the brief moment before that
+        // re-render happens, and any other non-ok status.
+        reportIfSessionExpired(res);
+        throw new Error(
+          res.status === 401
+            ? 'Your session has expired. Sign in again to continue.'
+            : `The server answered ${res.status}.`,
+        );
       }
+      const { settings: data, siteUrl } = await res.json();
+      setSettings(data || {});
+      setSiteUrlInfo(siteUrl ?? null);
     } catch (err) {
       console.error('Failed to load settings:', err);
+      setLoadError(err instanceof Error ? err.message : 'The settings could not be loaded.');
     } finally {
       setLoading(false);
     }
@@ -726,6 +746,9 @@ export default function SettingsEditor() {
   }
 
   async function handleSave() {
+    // The form is not rendered in this state, but Cmd+S still reaches here.
+    if (loadError) return;
+
     setSaving(true);
     setSaveMessage('');
 
@@ -750,9 +773,15 @@ export default function SettingsEditor() {
         setSaveMessage(data.message || 'Saved!');
         router.refresh();
         setTimeout(() => setSaveMessage(''), 5000);
-      } else {
+      } else if (!reportIfSessionExpired(res)) {
         const err = await res.json();
-        setSaveMessage(`Error: ${err.error}`);
+        // A rejected save names the fields that caused it. Listing them beats
+        // "could not be saved" over a form with forty inputs; putting the
+        // message next to each input is the job of #600.
+        const fields: string[] = Array.isArray(err.fields)
+          ? err.fields.map((f: { field?: string }) => f.field || 'settings')
+          : [];
+        setSaveMessage(`Error: ${err.error}${fields.length ? ` — ${fields.join(', ')}` : ''}`);
       }
     } catch {
       setSaveMessage('Error: Failed to save');
@@ -763,23 +792,36 @@ export default function SettingsEditor() {
 
   async function loadAboutContent() {
     setAboutLoading(true);
+    setAboutMessage('');
     try {
       const res = await fetch('/api/admin/about');
-      if (res.ok) {
-        const data = await res.json();
-        setAboutMeta(data.meta || {});
-        setAboutBody(data.body || '');
-        setAboutGearText(data.meta?.gear?.join('\n') || '');
-        setAboutLoaded(true);
+      if (!res.ok) {
+        throw new Error(
+          res.status === 401
+            ? 'Your session has expired. Sign in again to continue.'
+            : `The server answered ${res.status}.`,
+        );
       }
+      const data = await res.json();
+      setAboutMeta(data.meta || {});
+      setAboutBody(data.body || '');
+      setAboutGearText(data.meta?.gear?.join('\n') || '');
+      setAboutLoaded(true);
     } catch (err) {
       console.error('Failed to load about content:', err);
+      // aboutLoaded stays false, which is what blocks the save below: an empty
+      // editor written to about.md would replace the page with nothing.
+      setAboutMessage(
+        `Error: ${err instanceof Error ? err.message : 'The About page could not be loaded.'}`,
+      );
     } finally {
       setAboutLoading(false);
     }
   }
 
   async function saveAboutContent() {
+    if (!aboutLoaded) return;
+
     setAboutSaving(true);
     setAboutMessage('');
     const cleanedMeta = { ...aboutMeta };
@@ -842,6 +884,26 @@ export default function SettingsEditor() {
     );
   }
 
+  /**
+   * Deliberately replaces the form rather than sitting above it. An empty form
+   * is indistinguishable from a site with no settings yet, and editing one
+   * field in it used to publish that field as the entire settings.yaml.
+   */
+  if (loadError) {
+    return (
+      <div className="admin-error" role="alert">
+        <strong>Settings could not be loaded.</strong> {loadError}
+        <p>
+          Nothing has been changed. Saving stays disabled until they load, so an empty form cannot
+          overwrite your configuration.
+        </p>
+        <button className="admin-btn admin-btn-secondary" onClick={loadSettings}>
+          Try again
+        </button>
+      </div>
+    );
+  }
+
   // Resolved the same way the site resolves it, so the switches show what a
   // visitor actually sees — including a config that only ever set the older
   // `exifOnHover`.
@@ -898,6 +960,7 @@ export default function SettingsEditor() {
               key={sec.id}
               href={`/admin/settings/${sec.id}`}
               className={`settings-nav-item ${activeSection === sec.id ? 'active' : ''}`}
+              aria-current={activeSection === sec.id ? 'page' : undefined}
             >
               {sec.label}
             </Link>

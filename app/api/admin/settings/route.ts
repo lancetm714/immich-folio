@@ -1,20 +1,14 @@
 import { NextResponse } from 'next/server';
+import { withAdmin } from '@/lib/admin/withAdmin';
 import { revalidatePath } from 'next/cache';
-import { isAdminAuthenticated, isAdminEnabled } from '@/lib/admin/auth';
 import { readSettingsYaml, writeSettingsYaml } from '@/lib/admin/yaml-service';
 import { invalidateConfigCache, getConfigOrNull } from '@/lib/config';
 import { immich } from '@/lib/immich';
+import { validateSettings } from '@/lib/config/settingsSchema';
 import type { SettingsYaml } from '@/lib/config/schema';
 
 /** GET: Read current settings.yaml config. */
-export async function GET() {
-  if (!isAdminEnabled()) {
-    return NextResponse.json({ error: 'Admin not enabled' }, { status: 403 });
-  }
-  if (!(await isAdminAuthenticated())) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
+export const GET = withAdmin(async () => {
   const settings = await readSettingsYaml();
   const config = getConfigOrNull();
   return NextResponse.json({
@@ -26,20 +20,26 @@ export async function GET() {
       source: config?.siteUrlSource ?? 'none',
     },
   });
-}
+});
 
 /** PUT: Write settings.yaml config. */
-export async function PUT(request: Request) {
-  if (!isAdminEnabled()) {
-    return NextResponse.json({ error: 'Admin not enabled' }, { status: 403 });
-  }
-  if (!(await isAdminAuthenticated())) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
+export const PUT = withAdmin(async (request: Request) => {
   const body = await request.json().catch(() => null);
   if (!body?.settings) {
     return NextResponse.json({ error: 'Missing settings data' }, { status: 400 });
+  }
+
+  // Checked before the write, not after: settings.yaml is read by every public
+  // page, so a malformed save is discovered by visitors rather than here.
+  const validation = validateSettings(body.settings);
+  if (!validation.ok) {
+    return NextResponse.json(
+      {
+        error: 'These settings could not be saved.',
+        fields: validation.errors,
+      },
+      { status: 400 },
+    );
   }
 
   const settings = body.settings as SettingsYaml;
@@ -57,4 +57,4 @@ export async function PUT(request: Request) {
     console.error('[Admin] Failed to write settings.yaml:', err);
     return NextResponse.json({ error: 'Failed to save settings' }, { status: 500 });
   }
-}
+});

@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
+import { withAdmin } from '@/lib/admin/withAdmin';
 import { revalidatePath } from 'next/cache';
 import { promises as fs } from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
-import { isAdminAuthenticated, isAdminEnabled } from '@/lib/admin/auth';
+import { atomicWrite } from '@/lib/atomicWrite';
 
 const CONTENT_DIR = path.resolve(process.cwd(), 'content');
 const FILENAME = 'about.md';
@@ -21,14 +22,7 @@ interface AboutBody {
   body?: string;
 }
 
-export async function GET() {
-  if (!isAdminEnabled()) {
-    return NextResponse.json({ error: 'Admin not enabled' }, { status: 403 });
-  }
-  if (!(await isAdminAuthenticated())) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
+export const GET = withAdmin(async () => {
   const filePath = path.join(CONTENT_DIR, FILENAME);
   let meta: AboutMeta = {};
   let body = '';
@@ -49,16 +43,9 @@ export async function GET() {
   }
 
   return NextResponse.json({ meta, body });
-}
+});
 
-export async function PUT(request: Request) {
-  if (!isAdminEnabled()) {
-    return NextResponse.json({ error: 'Admin not enabled' }, { status: 403 });
-  }
-  if (!(await isAdminAuthenticated())) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
+export const PUT = withAdmin(async (request: Request) => {
   const data = (await request.json().catch(() => null)) as AboutBody | null;
   if (!data) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
@@ -77,10 +64,22 @@ export async function PUT(request: Request) {
   const content = `---\n${frontmatter}\n---\n\n${data.body ?? ''}\n`;
 
   const filePath = path.join(CONTENT_DIR, FILENAME);
+  await fs.mkdir(CONTENT_DIR, { recursive: true });
 
-  // ── Backup existing file ────────────────────────────────────
+  // "No file yet" and "the backup could not be written" used to share one
+  // catch, so a `.backups/` this save couldn't write to looked exactly like a
+  // brand-new file: the save went ahead with no snapshot taken (#630). Only
+  // ENOENT means there is nothing to back up; anything else aborts the save
+  // before it overwrites the live file.
+  let fileExists = true;
   try {
     await fs.access(filePath);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException & { code?: string }).code !== 'ENOENT') throw err;
+    fileExists = false;
+  }
+
+  if (fileExists) {
     const backupDir = path.join(CONTENT_DIR, '.backups');
     await fs.mkdir(backupDir, { recursive: true });
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -92,22 +91,11 @@ export async function PUT(request: Request) {
     while (aboutBackups.length > MAX_BACKUPS) {
       await fs.unlink(path.join(backupDir, aboutBackups.shift()!));
     }
-  } catch {
-    // File doesn't exist yet — no backup needed, but make sure the dir exists
-    await fs.mkdir(CONTENT_DIR, { recursive: true });
   }
 
-  // ── Atomic write (temp file + rename) ───────────────────────
-  const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  try {
-    await fs.writeFile(tmpPath, content, 'utf-8');
-    await fs.rename(tmpPath, filePath);
-  } catch (err) {
-    await fs.unlink(tmpPath).catch(() => {});
-    throw err;
-  }
+  await atomicWrite(filePath, content);
 
   revalidatePath('/about', 'layout');
 
   return NextResponse.json({ success: true, message: 'About page saved.' });
-}
+});

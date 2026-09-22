@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import BackupManagerModal from './BackupManagerModal';
 import type { DoctorLevel } from '@/lib/admin/doctor';
 import { DOCTOR_LEVEL_EVENT, systemHealth } from './systemHealth';
+import { reportIfSessionExpired } from './sessionExpiry';
 import * as Icons from './Icons';
 
 interface Props {
@@ -15,10 +16,11 @@ interface Props {
 }
 
 const TABS = [
-  { label: 'Pages', href: '/admin/pages', match: /^\/admin(\/pages)?$/ },
+  { label: 'Pages', href: '/admin/pages', match: /^\/admin\/pages$/ },
   { label: 'Journal', href: '/admin/journal', match: /^\/admin\/journal/ },
   { label: 'Settings', href: '/admin/settings', match: /^\/admin\/settings/ },
   { label: 'Analytics', href: '/admin/analytics', match: /^\/admin\/analytics/ },
+  { label: 'Diagnostics', href: '/admin/diagnostics', match: /^\/admin\/diagnostics/ },
   { label: 'Help', href: '/admin/help', match: /^\/admin\/help/ },
 ];
 
@@ -47,7 +49,15 @@ export default function AdminDashboard({ onLogout, children }: Props) {
   async function handleReload() {
     setSaving(true);
     try {
-      await fetch('/api/admin/reload', { method: 'POST' });
+      const res = await fetch('/api/admin/reload', { method: 'POST' });
+      // A 401 or a 500 used to be indistinguishable from success here — the
+      // result was never checked at all (#596).
+      if (!res.ok) {
+        if (!reportIfSessionExpired(res)) {
+          alert(`Reload failed (HTTP ${res.status}).`);
+        }
+        return;
+      }
       // Refresh status after reload
       await fetchStatus();
     } finally {
@@ -141,15 +151,19 @@ export default function AdminDashboard({ onLogout, children }: Props) {
         <div className="admin-header-left">
           <h1>Immich Folio</h1>
           <nav className="admin-tabs">
-            {TABS.map((t) => (
-              <Link
-                key={t.href}
-                href={t.href}
-                className={`admin-tab ${t.match.test(pathname) ? 'active' : ''}`}
-              >
-                {t.label}
-              </Link>
-            ))}
+            {TABS.map((t) => {
+              const active = t.match.test(pathname);
+              return (
+                <Link
+                  key={t.href}
+                  href={t.href}
+                  className={`admin-tab ${active ? 'active' : ''}`}
+                  aria-current={active ? 'page' : undefined}
+                >
+                  {t.label}
+                </Link>
+              );
+            })}
           </nav>
         </div>
         <div className="admin-header-right">
@@ -246,24 +260,6 @@ export default function AdminDashboard({ onLogout, children }: Props) {
                         <span className="status-val">{status?.update?.current ?? '—'}</span>
                       )}
                     </div>
-                  </div>
-                  <div className="status-dropdown-footer">
-                    <Link
-                      href="/admin/diagnostics"
-                      className="admin-btn admin-btn-sm"
-                      onClick={() => setShowStatus(false)}
-                    >
-                      <Icons.IconShieldCheck size={14} /> Diagnostics
-                    </Link>
-                    <button
-                      className="admin-btn admin-btn-sm"
-                      onClick={() => {
-                        setShowStatus(false);
-                        setShowBackupModal(true);
-                      }}
-                    >
-                      <Icons.IconArchive size={14} /> Manage Backups
-                    </button>
                   </div>
                 </div>
               </>

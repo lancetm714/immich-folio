@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withAdmin } from '@/lib/admin/withAdmin';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { isAdminAuthenticated, isAdminEnabled } from '@/lib/admin/auth';
-import { getConfig } from '@/lib/config';
+import { getConfig, slugify } from '@/lib/config';
 import { env } from '@/lib/env';
 import { listJournalEntries } from '@/lib/admin/journal-service';
 import {
   checkAlbumIds,
+  checkAlbumSlugCollisions,
   checkAlbumsShared,
   checkAuthSecret,
   checkImmichCalls,
@@ -17,6 +18,7 @@ import {
   PROXY_MARKER_HEADERS,
   worstLevel,
   type AlbumRef,
+  type AlbumSlugGroup,
   type DoctorFinding,
   type PasswordRef,
 } from '@/lib/admin/doctor';
@@ -28,14 +30,7 @@ import {
  * rather than failing the whole report, because a broken install is exactly
  * when this route needs to answer.
  */
-export async function GET(request: NextRequest) {
-  if (!isAdminEnabled()) {
-    return NextResponse.json({ error: 'Admin not enabled' }, { status: 403 });
-  }
-  if (!(await isAdminAuthenticated())) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
+export const GET = withAdmin(async (request: NextRequest) => {
   const config = getConfig();
   const findings: DoctorFinding[] = [];
 
@@ -87,18 +82,35 @@ export async function GET(request: NextRequest) {
 
     if (albumRes) {
       try {
-        albums = (await albumRes.json()) as AlbumRef[];
+        const parsed: unknown = await albumRes.json();
+        if (Array.isArray(parsed)) albums = parsed as AlbumRef[];
       } catch {
         // A malformed body is already reflected by the call above.
       }
     }
 
     findings.push(checkImmichCalls(calls));
-  }
 
-  if (albums.length) {
-    findings.push(checkAlbumIds(config.albums, albums));
-    findings.push(checkAlbumsShared(config.albums, albums));
+    // Whenever albums are configured, run the check even if Immich answered
+    // with an empty list — an API key regenerated under a different account,
+    // say. `if (albums.length)` used to skip this entirely, so a `200 []`
+    // response passed every connection check and reported nothing about
+    // albums at all, while every album page was silently empty (#629).
+    // checkAlbumIds treats every configured ID as missing when none resolve.
+    if (config.albums.length) {
+      findings.push(checkAlbumIds(config.albums, albums));
+      findings.push(checkAlbumsShared(config.albums, albums));
+
+      // deriveGallery already rejects a slug collision between two albums
+      // that both have a title override; this is the other half, using the
+      // album's resolved name (override, or otherwise whatever Immich calls
+      // it), which is only known once Immich has answered (#632).
+      const slugGroups: AlbumSlugGroup[] = [
+        { context: 'gallery.yaml albums', albumIds: config.standaloneAlbums },
+        ...config.subpages.map((sp) => ({ context: `subpage "${sp.name}"`, albumIds: sp.albumIds })),
+      ];
+      findings.push(checkAlbumSlugCollisions(slugGroups, config.albumOverrides, albums, slugify));
+    }
   }
 
   // ── Passwords: every place one can be configured ─────────────────────
@@ -144,4 +156,4 @@ export async function GET(request: NextRequest) {
     { level: worstLevel(findings), findings },
     { headers: { 'Cache-Control': 'no-store' } },
   );
-}
+});

@@ -159,10 +159,19 @@ export function buildCoverGridVars(
   return vars;
 }
 
-function clamp(value: number, min: number, max: number): number {
+/**
+ * `unknown` rather than `number`: this also guards the site-wide and
+ * per-subpage/album grid columns and gap (lib/config/index.ts), which a
+ * hand-edited gallery.yaml or settings.yaml can hand a string, `null`, or
+ * anything else. `typeof value !== 'number'` catches those before
+ * `Number.isFinite` gets a chance to — it would otherwise coerce nothing and
+ * just report `false` for a non-number, which happens to be what we want here
+ * too, but checking the type first makes that not an accident.
+ */
+export function clamp(value: unknown, min: number, max: number): number {
   // NaN from a malformed YAML value would survive Math.min/Math.max, and
   // `repeat(NaN, 1fr)` is an invalid declaration that drops the whole rule.
-  if (!Number.isFinite(value)) return min;
+  if (typeof value !== 'number' || !Number.isFinite(value)) return min;
   return Math.min(max, Math.max(min, Math.round(value)));
 }
 
@@ -537,6 +546,36 @@ export function slugify(name: string): string {
  */
 export function albumSlug(name: string, id: string): string {
   return slugify(name) || id;
+}
+
+/**
+ * Groups of albums whose slug collides, among a set that will all be
+ * reachable under one URL prefix — the standalone albums, or one subpage's
+ * albums (top-level and sectioned together, since they share a route).
+ *
+ * Every consumer that resolves a slug — getAlbumBySlug, the sitemap, the page
+ * builder — takes the first match, so an unflagged collision makes the second
+ * album unreachable and has its settings (password, sort, grid…) resolved
+ * from the first instead (#632).
+ *
+ * An empty slug (a name with no letters or digits at all) is excluded:
+ * albumSlug() falls back to the album id for that case, which is unique by
+ * construction, so it can never actually collide.
+ */
+export function findAlbumSlugCollisions(
+  albums: Array<{ id: string; name: string }>,
+): Array<{ slug: string; albums: Array<{ id: string; name: string }> }> {
+  const bySlug = new Map<string, Array<{ id: string; name: string }>>();
+  for (const album of albums) {
+    const slug = slugify(album.name);
+    if (!slug) continue;
+    const group = bySlug.get(slug) ?? [];
+    group.push(album);
+    bySlug.set(slug, group);
+  }
+  return Array.from(bySlug.entries())
+    .filter(([, group]) => group.length > 1)
+    .map(([slug, group]) => ({ slug, albums: group }));
 }
 
 /**

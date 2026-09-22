@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { immich, ImmichUnavailableError } from '../immich';
 import * as config from '../config';
 import { cache } from '../cache';
@@ -8,6 +8,8 @@ import type { AlbumSortMode } from '../albumSort';
 // able to change it between calls without rebuilding the whole mock.
 const albumSortModes: Record<string, AlbumSortMode> = {};
 const albumManualOrders: Record<string, string[]> = {};
+// Same for the subpages: the route tests below add one and take it away again.
+const subpages: { slug: string; albumIds: string[]; enabled?: boolean }[] = [];
 
 // Mock the config by wrapping it in a factory
 vi.mock('../config', async () => {
@@ -18,8 +20,10 @@ vi.mock('../config', async () => {
       immich: { apiUrl: 'http://immich.test/api', apiKey: 'test-key' },
       authSecret: 'test-auth-secret-32-chars-long-min',
       albums: ['album-1', 'album-2'],
-      standaloneAlbums: ['album-2', 'album-1'],
-      subpages: [],
+      standaloneAlbums: ['album-2', 'album-1'].filter(
+        (id) => !subpages.some((sp) => sp.albumIds.includes(id)),
+      ),
+      subpages,
       albumOverrides: { 'album-1': 'Override Name' },
       albumDescriptions: {},
       albumSortModes,
@@ -267,6 +271,53 @@ describe('ImmichClient', () => {
       const result = await immich.streamVideo('asset-1', 'bytes=0-1023');
       expect(result?.status).toBe(206);
     });
+
+    /**
+     * Neither error branch reads the body. Under undici an unconsumed one
+     * keeps its socket out of the pool until GC finalises it, so a proxy
+     * answering every request with an error accumulates orphaned sockets for
+     * as long as the fault lasts (#635).
+     */
+    const streamResWithBody = (status: number) => {
+      const cancel = vi.fn();
+      return {
+        res: {
+          ok: status >= 200 && status < 300,
+          status,
+          body: { cancel },
+          headers: { get: () => null },
+        },
+        cancel,
+      };
+    };
+
+    it('streamAsset cancels the body on the "gone" path', async () => {
+      const { res, cancel } = streamResWithBody(404);
+      mockFetch.mockResolvedValueOnce(res);
+      await expect(immich.streamAsset('asset-1')).resolves.toBeNull();
+      expect(cancel).toHaveBeenCalledOnce();
+    });
+
+    it('streamAsset cancels the body on the "outage" path', async () => {
+      const { res, cancel } = streamResWithBody(500);
+      mockFetch.mockResolvedValueOnce(res);
+      await expect(immich.streamAsset('asset-1')).rejects.toBeInstanceOf(ImmichUnavailableError);
+      expect(cancel).toHaveBeenCalledOnce();
+    });
+
+    it('streamVideo cancels the body on the "gone" path', async () => {
+      const { res, cancel } = streamResWithBody(404);
+      mockFetch.mockResolvedValueOnce(res);
+      await expect(immich.streamVideo('asset-1')).resolves.toBeNull();
+      expect(cancel).toHaveBeenCalledOnce();
+    });
+
+    it('streamVideo cancels the body on the "outage" path', async () => {
+      const { res, cancel } = streamResWithBody(502);
+      mockFetch.mockResolvedValueOnce(res);
+      await expect(immich.streamVideo('asset-1')).rejects.toBeInstanceOf(ImmichUnavailableError);
+      expect(cancel).toHaveBeenCalledOnce();
+    });
   });
 
   // Measured before the fix: 5 sequential lookups of a missing asset produced 5
@@ -435,6 +486,66 @@ describe('ImmichClient', () => {
 
       const album = await immich.getAlbumBySlug('album-2');
       expect(album?.id).toBe('album-2');
+    });
+  });
+
+  /**
+   * config.albums is the union of standalone and subpage albums. A slug has to
+   * be looked up among the albums of the route it arrived on, or a top-level
+   * URL answers for an album whose only route is a subpage — past that
+   * subpage's password.
+   */
+  describe('getAlbumBySlug() searches the route, not the allowlist', () => {
+    beforeEach(() => {
+      const json = (body: unknown) => ({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => body,
+      });
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url.includes('/search/metadata')) {
+          return json({ assets: { items: [], nextPage: null, total: 0 } });
+        }
+        const one = /\/albums\/(album-[12])/.exec(url);
+        if (one) {
+          const albumName = one[1] === 'album-1' ? 'Client Preview' : 'Open Work';
+          return json({ id: one[1], albumName, assetCount: 0, assets: [], order: 'desc' });
+        }
+        return json([
+          { id: 'album-1', albumName: 'Client Preview', assetCount: 0 },
+          { id: 'album-2', albumName: 'Open Work', assetCount: 0 },
+        ]);
+      });
+    });
+
+    afterEach(() => {
+      subpages.length = 0;
+    });
+
+    it('finds a standalone album at the top level', async () => {
+      const album = await immich.getAlbumBySlug('open-work');
+      expect(album?.id).toBe('album-2');
+    });
+
+    it('does not find a subpage album at the top level', async () => {
+      subpages.push({ slug: 'handover', albumIds: ['album-1'] });
+
+      // album-1 carries the 'Override Name' override, so that is its slug.
+      expect(await immich.getAlbumBySlug('override-name')).toBeNull();
+      expect((await immich.getAlbumBySlug('override-name', 'handover'))?.id).toBe('album-1');
+    });
+
+    it('does not find anything through a disabled subpage', async () => {
+      subpages.push({ slug: 'handover', albumIds: ['album-1'], enabled: false });
+
+      expect(await immich.getAlbumBySlug('override-name', 'handover')).toBeNull();
+      expect(await immich.getAlbumBySlug('override-name')).toBeNull();
+    });
+
+    it('does not find a standalone album through a subpage that does not list it', async () => {
+      subpages.push({ slug: 'handover', albumIds: ['album-1'] });
+
+      expect(await immich.getAlbumBySlug('open-work', 'handover')).toBeNull();
     });
   });
 
@@ -760,6 +871,62 @@ describe('stale fallback when Immich is unavailable', () => {
     await expect(immich.getAlbums()).rejects.toThrow(ImmichUnavailableError);
   });
 
+  /**
+   * getAlbums(true) used to delete the cache entry before attempting the
+   * fetch. A request with forceFresh that then failed left every later
+   * visitor — not just the one who asked for a refresh — with nothing to
+   * fall back to, for as long as the outage lasted (GHSA-w293-x8pc-j4cv).
+   */
+  it('forceFresh does not delete the entry a failed refresh could have fallen back to', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: async () => [
+        {
+          id: 'album-1',
+          albumName: 'Original',
+          description: '',
+          albumThumbnailAssetId: null,
+          assetCount: 1,
+          assets: [],
+          createdAt: '',
+          updatedAt: '',
+          order: 'desc',
+        },
+      ],
+    });
+    expect(await immich.getAlbums()).toHaveLength(1);
+
+    mockFetch.mockRejectedValue(new Error('ECONNREFUSED'));
+    const refreshed = await immich.getAlbums(true);
+
+    expect(refreshed).toHaveLength(1);
+    expect(refreshed[0].id).toBe('album-1');
+  });
+
+  it('getAlbum(id, true) has the same guarantee as getAlbums(true)', async () => {
+    // GET /albums/:id and POST /search/metadata run concurrently (Promise.all
+    // in loadAlbum), so they must be routed by URL rather than queued in call
+    // order — same pattern as the getAlbum() describe block below.
+    mockFetch.mockImplementation(async (url: string) => ({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: async () =>
+        url.includes('/search/metadata')
+          ? { assets: { items: [], nextPage: null, total: 0 } }
+          : { id: 'album-1', albumName: 'Original', assetCount: 0, assets: [], order: 'desc' },
+    }));
+    expect(await immich.getAlbum('album-1')).not.toBeNull();
+
+    mockFetch.mockImplementation(async () => {
+      throw new Error('ECONNREFUSED');
+    });
+    const refreshed = await immich.getAlbum('album-1', true);
+
+    expect(refreshed).not.toBeNull();
+    expect(refreshed?.id).toBe('album-1');
+  });
+
   it('does not swallow a definitive 404 as an outage', async () => {
     // A missing album must keep reporting missing, not fall back to stale data.
     mockFetch.mockResolvedValue({
@@ -774,5 +941,45 @@ describe('stale fallback when Immich is unavailable', () => {
   it('still refuses albums outside the allowlist', async () => {
     mockFetch.mockRejectedValue(new Error('ECONNREFUSED'));
     await expect(immich.getAlbum('not-allowed')).resolves.toBeNull();
+  });
+
+  // #626: a cached 404 used to come back from the stale fallback as the MISSING
+  // sentinel itself — a truthy object with no fields. Every `if (!asset)` guard
+  // passed on it and the page answered 500 for the length of the outage.
+  const notFound = {
+    ok: false,
+    status: 404,
+    statusText: 'Not Found',
+    headers: { get: () => 'application/json' },
+  };
+
+  it('answers a stale "missing" asset with null during an outage', async () => {
+    mockFetch.mockResolvedValue(notFound);
+    await expect(immich.getAssetInfo('deleted-hero')).resolves.toBeNull();
+
+    vi.useFakeTimers();
+    vi.advanceTimersByTime(60_001); // past cacheTtl, inside the stale window
+    mockFetch.mockRejectedValue(new Error('ECONNREFUSED'));
+
+    const result = await immich.getAssetInfo('deleted-hero');
+    vi.useRealTimers();
+
+    // toBeNull, not toBeFalsy: the bug was a truthy object, so the precise
+    // assertion is the one that would have failed.
+    expect(result).toBeNull();
+  });
+
+  it('answers a stale "missing" album with null during an outage', async () => {
+    mockFetch.mockResolvedValue(notFound);
+    await expect(immich.getAlbum('album-1')).resolves.toBeNull();
+
+    vi.useFakeTimers();
+    vi.advanceTimersByTime(60_001);
+    mockFetch.mockRejectedValue(new Error('ECONNREFUSED'));
+
+    const result = await immich.getAlbum('album-1');
+    vi.useRealTimers();
+
+    expect(result).toBeNull();
   });
 });

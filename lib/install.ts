@@ -21,7 +21,8 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import yaml from 'js-yaml';
-import { env } from './env';
+import { atomicWrite } from './atomicWrite';
+import { env, normalizeApiUrl } from './env';
 import { generateScryptHash } from './password';
 import type { GalleryYaml, SettingsYaml } from './config/schema';
 import { DEFAULT_PRESET } from './config/theme';
@@ -164,8 +165,13 @@ function readInstallFile(): InstallFileData {
  */
 export function getInstallCredentials(): InstallCredentials {
   const file = readInstallFile();
+  const apiUrl = env.IMMICH_API_URL || file.apiUrl || '';
   return {
-    apiUrl: env.IMMICH_API_URL || file.apiUrl || '',
+    // Normalised on every read, not only when completeInstall writes it, so
+    // an install.json written before this fix heals without re-running the
+    // wizard. env.ts already normalises IMMICH_API_URL, so this is a no-op
+    // for that source and only does real work for file.apiUrl (#634).
+    apiUrl: apiUrl ? normalizeApiUrl(apiUrl) || apiUrl : '',
     apiKey: env.IMMICH_API_KEY || file.apiKey || '',
     authSecret: env.AUTH_SECRET || file.authSecret || '',
     adminPassword: env.ADMIN_PASSWORD || file.adminPassword || '',
@@ -223,16 +229,10 @@ export interface InstallInput {
   adminPassword?: string;
 }
 
-/** Write a file atomically: unique temp file, then rename. */
-async function atomicWrite(filePath: string, content: string): Promise<void> {
-  const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  try {
-    await fs.promises.writeFile(tmpPath, content, 'utf8');
-    await fs.promises.rename(tmpPath, filePath);
-  } catch (err) {
-    await fs.promises.unlink(tmpPath).catch(() => {});
-    throw err;
-  }
+/** Which of the two config files completeInstall actually wrote. */
+export interface CompleteInstallResult {
+  galleryWritten: boolean;
+  settingsWritten: boolean;
 }
 
 /**
@@ -242,7 +242,7 @@ async function atomicWrite(filePath: string, content: string): Promise<void> {
  * the owner can fill in later via /admin), settings.yaml, and install.json.
  * Runs before caches are invalidated, so the caller owns that step.
  */
-export async function completeInstall(input: InstallInput): Promise<void> {
+export async function completeInstall(input: InstallInput): Promise<CompleteInstallResult> {
   const dir = installContentDir();
   await fs.promises.mkdir(dir, { recursive: true });
 
@@ -261,8 +261,15 @@ export async function completeInstall(input: InstallInput): Promise<void> {
     theme: { preset: input.theme || DEFAULT_PRESET },
   };
 
+  // Stored normalised, not raw: the route verifies the connection against
+  // normalizeApiBase(apiUrl), which strips a trailing slash, but this used
+  // to write input.apiUrl.trim() unchanged, so "https://host/api/" passed
+  // the ping and then every request after install went to
+  // ".../api//api/albums" and 404ed (#634).
+  const normalizedApiUrl = normalizeApiUrl(input.apiUrl.trim()) || input.apiUrl.trim();
+
   const data: InstallFileData = {
-    apiUrl: input.apiUrl.trim(),
+    apiUrl: normalizedApiUrl,
     apiKey: input.apiKey.trim(),
     authSecret: crypto.randomBytes(32).toString('hex'),
     // Hashed, not stored as typed: the API key and the site secret have to be
@@ -280,20 +287,32 @@ export async function completeInstall(input: InstallInput): Promise<void> {
   const galleryPath = path.join(dir, 'gallery.yaml');
   const settingsPath = path.join(dir, 'settings.yaml');
 
-  await atomicWrite(galleryPath, header('Gallery Structure') + yaml.dump(gallery, dumpOptions));
+  // Only create gallery.yaml if it does not already exist yet, same as
+  // settings.yaml below. isInstalled() is false whenever Immich credentials
+  // fail to resolve — a bad IMMICH_API_URL, a corrupt install.json — whether
+  // or not gallery.yaml exists, so re-running the wizard after that is not
+  // evidence gallery.yaml needs replacing. Every subpage, section, password,
+  // assetOrder and per-album override a site has accumulated used to be
+  // overwritten unconditionally with this two-key skeleton (#627).
+  const galleryWritten = !fs.existsSync(galleryPath);
+  if (galleryWritten) {
+    await atomicWrite(galleryPath, header('Gallery Structure') + yaml.dump(gallery, dumpOptions));
+  }
 
   // Only create settings.yaml if it does not already exist — a deployment that
   // brings its own customised settings.yaml (but is missing gallery.yaml) must
   // not have it silently replaced with the three-key skeleton the wizard writes.
-  if (!fs.existsSync(settingsPath)) {
+  const settingsWritten = !fs.existsSync(settingsPath);
+  if (settingsWritten) {
     await atomicWrite(settingsPath, header('Site Settings') + yaml.dump(settings, dumpOptions));
   }
-  await atomicWrite(path.join(dir, INSTALL_FILENAME), `${JSON.stringify(data, null, 2)}\n`);
-  try {
-    await fs.promises.chmod(path.join(dir, INSTALL_FILENAME), 0o600);
-  } catch {
-    // chmod is a no-op on Windows; on Linux it prevents world-readable secrets.
-  }
+  // Written 0600 from the start, like the setup token below — not created
+  // world-readable and tightened afterwards, which briefly left the API key
+  // and auth secret readable by anyone on the box (GHSA-w293-x8pc-j4cv).
+  // `mode` is a no-op on Windows, same as the chmod it replaces was.
+  await atomicWrite(path.join(dir, INSTALL_FILENAME), `${JSON.stringify(data, null, 2)}\n`, {
+    mode: 0o600,
+  });
 
   // The token exists to gate a setup that has not happened yet. Leaving it on
   // disk would keep a valid credential lying around for a door that is now
@@ -307,4 +326,6 @@ export async function completeInstall(input: InstallInput): Promise<void> {
   // Drop the in-process cache so the next isInstalled()/getInstallCredentials()
   // call reads the freshly written file.
   cachedInstallFile = null;
+
+  return { galleryWritten, settingsWritten };
 }

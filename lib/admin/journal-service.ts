@@ -6,6 +6,7 @@
 import fs from 'fs/promises';
 import nodeFs from 'fs';
 import path from 'path';
+import { atomicWrite } from '../atomicWrite';
 import {
   parseJournalMarkdown,
   calculateReadingTime,
@@ -19,7 +20,6 @@ const JOURNAL_DIR = path.join(process.cwd(), 'content', 'journal');
 const LEGACY_ESSAYS_DIR = path.join(process.cwd(), 'content', 'essays');
 const BACKUP_DIR = path.join(JOURNAL_DIR, '.backups');
 const MAX_BACKUPS = 10;
-let tmpCounter = 0;
 
 /**
  * Names this service writes into .backups/, and the only ones it restores from.
@@ -127,14 +127,7 @@ export async function restoreJournalBackup(backupFilename: string): Promise<stri
   }
 
   await fs.mkdir(JOURNAL_DIR, { recursive: true });
-  const tmpPath = `${target}.${process.pid}.${++tmpCounter}.tmp`;
-  try {
-    await fs.writeFile(tmpPath, content, 'utf8');
-    await fs.rename(tmpPath, target);
-  } catch (err) {
-    await fs.unlink(tmpPath).catch(() => {});
-    throw err;
-  }
+  await atomicWrite(target, content);
 
   console.log(`[Journal] 🔄 Restored ${filename} from ${backupFilename}`);
   return slug;
@@ -280,23 +273,42 @@ export async function writeJournalEntry(slug: string, rawMarkdown: string): Prom
     throw new Error(`Invalid journal slug: "${slug}"`);
   }
 
-  // Create rolling backup if file already exists
+  // "No file yet" and "the backup could not be written" used to share one
+  // catch, so a `.backups/` a save couldn't write to looked exactly like a
+  // brand-new entry: the save went ahead with no snapshot taken (#630). Only
+  // ENOENT means there is nothing to back up; anything else aborts the save
+  // before it overwrites the live file.
+  let fileExists = true;
   try {
     await fs.access(filePath);
-    await snapshotEntry(filePath, filename);
-    await pruneEntryBackups(filename);
-  } catch {
-    // New file, no backup needed
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    fileExists = false;
   }
 
-  // Atomic write via unique temp file
-  const tmpPath = `${filePath}.${process.pid}.${++tmpCounter}.tmp`;
-  try {
-    await fs.writeFile(tmpPath, rawMarkdown, 'utf8');
-    await fs.rename(tmpPath, filePath);
-  } catch (err) {
-    await fs.unlink(tmpPath).catch(() => {});
-    throw err;
+  if (fileExists) {
+    await snapshotEntry(filePath, filename);
+    await pruneEntryBackups(filename);
+  }
+
+  await atomicWrite(filePath, rawMarkdown);
+
+  // An entry that started in content/essays/ now has a copy in both
+  // directories; resolveJournalFilePath would keep favouring this new one,
+  // but deleteJournalEntry used to only ever see one path at a time and could
+  // leave the legacy copy behind to resurface on the next listing (#631).
+  // Retiring it here, once the new content is safely on disk, means delete
+  // never has to reconcile two files for one slug.
+  const legacyPath = containedPath(LEGACY_ESSAYS_DIR, filename);
+  if (legacyPath) {
+    try {
+      await fs.access(legacyPath);
+      await snapshotEntry(legacyPath, filename);
+      await fs.unlink(legacyPath);
+      console.log(`[Journal] 🧹 Retired legacy copy of ${filename} in content/essays/`);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    }
   }
 
   console.log(`[Journal] ✅ Saved ${filename}`);
@@ -316,22 +328,33 @@ export async function deleteJournalEntry(slug: string): Promise<boolean> {
     throw new Error(`Invalid journal slug: "${slug}"`);
   }
 
-  const filePath = resolveJournalFilePath(slug);
-  if (!filePath) return false;
+  const filename = `${slug}.md`;
+  const primaryPath = containedPath(JOURNAL_DIR, filename);
+  const legacyPath = containedPath(LEGACY_ESSAYS_DIR, filename);
+  if (!primaryPath || !legacyPath) return false;
 
-  try {
-    await fs.access(filePath);
-  } catch {
-    return false;
+  // Check both directories, not just whichever resolveJournalFilePath would
+  // pick: an entry that was saved once while still in content/essays/ used to
+  // leave a copy there, which listJournalEntries would bring back as soon as
+  // the content/journal/ copy was deleted (#631). writeJournalEntry now
+  // retires the legacy copy on every save, but a legacy entry that was never
+  // edited still lives there alone, so both paths must be checked here too.
+  let deletedAny = false;
+  for (const filePath of [primaryPath, legacyPath]) {
+    try {
+      await fs.access(filePath);
+    } catch {
+      continue;
+    }
+    await snapshotEntry(filePath, filename, 'deleted');
+    try {
+      await fs.unlink(filePath);
+      deletedAny = true;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    }
   }
-  await snapshotEntry(filePath, `${slug}.md`, 'deleted');
 
-  try {
-    await fs.unlink(filePath);
-    console.log(`[Journal] 🗑️ Deleted ${slug}.md`);
-    return true;
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return false;
-    throw err;
-  }
+  if (deletedAny) console.log(`[Journal] 🗑️ Deleted ${filename}`);
+  return deletedAny;
 }

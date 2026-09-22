@@ -147,6 +147,24 @@ export function checkProxyHops(
     };
   }
 
+  // configuredHops is between 0 and provenHops (both handled above), so the
+  // position read is still inside the chain rather than at its start: every
+  // request is read from a proxy's own address, not the client behind it.
+  // Cloudflare (1 hop) in front of nginx (1 more, 2 total) with the value set
+  // to 1 reads the Cloudflare edge address, and every visitor behind that
+  // edge shares one rate-limit bucket — this used to report "matches the
+  // observed chain".
+  if (configuredHops < provenHops) {
+    return {
+      id: 'proxy-hops',
+      level: 'warn',
+      title: `TRUSTED_PROXY_HOPS is ${configuredHops}, but a chain of ${provenHops} proxy hops was seen`,
+      detail:
+        'The client IP is read from a position still inside the proxy chain, not the real client — ' +
+        `every visitor behind that hop can share one rate-limit bucket. ${provenHops} is what this request suggests.`,
+    };
+  }
+
   return {
     id: 'proxy-hops',
     level: 'ok',
@@ -241,6 +259,77 @@ export function checkAlbumsShared(configured: string[], known: AlbumRef[]): Doct
       'They are served to visitors regardless — the allowlist in gallery.yaml is what decides. ' +
       `Worth a look if it was unintentional: ${unshared.map((a) => a.albumName).join(', ')}`,
     albumIds: unshared.map((a) => a.id),
+  };
+}
+
+/** One set of albums that will all be reachable under the same URL prefix. */
+export interface AlbumSlugGroup {
+  /** e.g. "gallery.yaml albums" or `subpage "Trips"` */
+  context: string;
+  albumIds: string[];
+}
+
+/**
+ * Album slug collisions using each album's *resolved* name — the title
+ * override if one is set, otherwise whatever Immich calls it. deriveGallery
+ * can only see the override half of that (#632); this is the other half,
+ * checked against the live album list the doctor already has.
+ *
+ * `slugOf` is a parameter rather than an import so this file keeps the zero
+ * dependencies it has had since #491 — the whole reason `scripts/doctor.mts`
+ * can run this module directly through Node's native TypeScript stripping,
+ * with no bundler and no `lib/config` (which pulls in `fs`).
+ */
+export function checkAlbumSlugCollisions(
+  groups: AlbumSlugGroup[],
+  overrides: Record<string, string>,
+  known: AlbumRef[],
+  slugOf: (name: string) => string,
+): DoctorFinding {
+  const byId = new Map(known.map((a) => [a.id, a]));
+  const collisions: string[] = [];
+  const collidingIds: string[] = [];
+
+  for (const group of groups) {
+    const named = group.albumIds
+      .map((id) => ({ id, name: overrides[id] ?? byId.get(id)?.albumName }))
+      .filter((a): a is { id: string; name: string } => !!a.name);
+
+    const bySlug = new Map<string, typeof named>();
+    for (const album of named) {
+      const slug = slugOf(album.name);
+      if (!slug) continue; // Falls back to the id elsewhere, which is unique.
+      const list = bySlug.get(slug) ?? [];
+      list.push(album);
+      bySlug.set(slug, list);
+    }
+
+    for (const [slug, collided] of bySlug) {
+      if (collided.length < 2) continue;
+      collisions.push(
+        `${group.context}: "${collided.map((a) => a.name).join('" and "')}" all resolve to /${slug}`,
+      );
+      collidingIds.push(...collided.map((a) => a.id));
+    }
+  }
+
+  if (collisions.length) {
+    return {
+      id: 'album-slugs',
+      level: 'error',
+      title: `${collisions.length} album slug ${collisions.length === 1 ? 'collision' : 'collisions'} found`,
+      detail:
+        'Every album after the first in a collision is unreachable at its own URL, and its ' +
+        `settings resolve from the one before it. ${collisions.join('; ')}`,
+      albumIds: collidingIds,
+    };
+  }
+
+  return {
+    id: 'album-slugs',
+    level: 'ok',
+    title: 'No album slug collisions',
+    detail: 'Every album reachable under the same URL prefix has a distinct slug.',
   };
 }
 

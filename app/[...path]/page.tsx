@@ -25,7 +25,7 @@ import {
   downloadUrl,
   assetAspectRatio,
 } from '@/lib/urls';
-import { encodeAssetId } from '@/lib/tokens';
+import { encodeAssetId, decodeAssetId } from '@/lib/tokens';
 import {
   buildCoverGridVars,
   getConfig,
@@ -34,7 +34,7 @@ import {
   resolveProofing,
   type GridConfig,
 } from '@/lib/config';
-import { isProtected, isAuthenticated } from '@/lib/auth';
+import { isProtected, isAuthenticated, withoutLockedAlbums } from '@/lib/auth';
 import { isAdminAuthenticated } from '@/lib/admin/auth';
 import PasswordGate from '@/components/PasswordGate';
 import { AdminDiagnosticBanner } from '@/components/AdminDiagnosticBanner';
@@ -56,7 +56,21 @@ interface PathPageProps {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
-export async function generateMetadata({ params }: PathPageProps): Promise<Metadata> {
+/**
+ * Whether `key` is password-protected and this request has not unlocked it.
+ * generateMetadata runs unconditionally — unlike the page body, nothing
+ * downstream of it stops a real title, photo count or cover image from
+ * reaching an unauthenticated `<head>` unless this is checked first
+ * (GHSA-fvgv-97g3-wjr7).
+ */
+async function isLocked(key: string, type: 'subpage' | 'album'): Promise<boolean> {
+  if (!isProtected(key, type)) return false;
+  const cookieStore = await cookies();
+  const getCookie = (name: string) => cookieStore.get(name)?.value;
+  return !isAuthenticated(key, getCookie, type);
+}
+
+export async function generateMetadata({ params, searchParams }: PathPageProps): Promise<Metadata> {
   // Next hands catch-all segments over percent-encoded, so a non-ASCII slug
   // ("/家族相册") would never match a stored one. Decode once, here, and every
   // comparison downstream works on the same form (#522).
@@ -64,58 +78,80 @@ export async function generateMetadata({ params }: PathPageProps): Promise<Metad
   const path = rawPath?.map(normalizeSlug);
   if (!path || path.length === 0) return {};
 
+  // A shared photo link's whole point is that it reaches the server — unlike
+  // the #photo-N hash it replaces, a `photo` query param is visible here, so
+  // a link-preview bot can render the photo itself rather than the album's
+  // generic card (#588).
+  const sp = (await searchParams) || {};
+  const photoToken = typeof sp.photo === 'string' ? sp.photo : undefined;
+  const photoAssetId = photoToken ? decodeAssetId(photoToken) : null;
+  let photoAsset: ImmichAsset | undefined;
+
   const slug = path[0];
   let title = slug;
   let subtitle = '';
   let description: string | undefined = undefined;
   if (path.length === 1 && immich.isSubpageSlug(slug)) {
+    const subpageLocked = await isLocked(slug, 'subpage');
     const result = await immich.getSubpageAlbums(slug);
     if (result) {
-      if (result.subpage.subtitle) {
+      if (!subpageLocked && result.subpage.subtitle) {
         description = result.subpage.subtitle;
       }
       if (result.albums.length === 1) {
         const album = await immich.getAlbumBySlug(result.albums[0].slug, slug);
-        if (album) {
+        if (album && !subpageLocked && !(await isLocked(album.id, 'album'))) {
           title = album.albumName;
           const count = album.assets.filter((a) => a.type === 'IMAGE' || a.type === 'VIDEO').length;
           subtitle = `${count} photo${count === 1 ? '' : 's'}`;
+          if (photoAssetId) photoAsset = album.assets.find((a) => a.id === photoAssetId);
         }
-      } else {
+      } else if (!subpageLocked) {
         title = result.subpage.title || result.subpage.name;
       }
     }
   } else if (path.length === 2) {
     const album = await immich.getAlbumBySlug(path[1], slug);
-    if (album) {
+    if (album && !(await isLocked(slug, 'subpage')) && !(await isLocked(album.id, 'album'))) {
       title = album.albumName;
       const count = album.assets.filter((a) => a.type === 'IMAGE' || a.type === 'VIDEO').length;
       subtitle = `${count} photo${count === 1 ? '' : 's'}`;
+      if (photoAssetId) photoAsset = album.assets.find((a) => a.id === photoAssetId);
     }
   } else {
     const album = await immich.getAlbumBySlug(slug);
-    if (album) {
+    if (album && !(await isLocked(album.id, 'album'))) {
       title = album.albumName;
       const count = album.assets.filter((a) => a.type === 'IMAGE' || a.type === 'VIDEO').length;
       subtitle = `${count} photo${count === 1 ? '' : 's'}`;
+      if (photoAssetId) photoAsset = album.assets.find((a) => a.id === photoAssetId);
     }
   }
 
-  const ogUrl = `/api/og?title=${encodeURIComponent(title)}${subtitle ? `&subtitle=${encodeURIComponent(subtitle)}` : ''}`;
+  // The title stays the album's — it's still the context a reader wants —
+  // but the description prefers the photo's own caption, and the image is
+  // the photo itself rather than the generated text card.
+  const ogDescription =
+    photoAsset?.exifInfo?.description?.trim() ||
+    description ||
+    (subtitle ? `${title} — ${subtitle}` : undefined);
+  const ogImage = photoAsset
+    ? imageUrl(photoAsset.id, 'preview')
+    : `/api/og?title=${encodeURIComponent(title)}${subtitle ? `&subtitle=${encodeURIComponent(subtitle)}` : ''}`;
 
   return {
     title,
-    description: description || (subtitle ? `${title} — ${subtitle}` : undefined),
+    description: ogDescription,
     openGraph: {
       title,
-      description: description || (subtitle ? `${title} — ${subtitle}` : undefined),
-      images: [ogUrl],
+      description: ogDescription,
+      images: [ogImage],
     },
     twitter: {
       card: 'summary_large_image',
       title,
-      description: description || (subtitle ? `${title} — ${subtitle}` : undefined),
-      images: [ogUrl],
+      description: ogDescription,
+      images: [ogImage],
     },
   };
 }
@@ -229,7 +265,13 @@ export default async function PathPage({ params, searchParams }: PathPageProps) 
   const { path: rawPath } = await params;
   const path = rawPath?.map(normalizeSlug);
   const sParams = (await searchParams) || {};
-  const forceFresh = sParams.fresh === '1' || sParams.preview === 'true';
+  // ?fresh=1 / ?preview=true forces a cache-bypassing Immich refetch — cheap
+  // to trigger, and every subpage request fans out into an album-list fetch
+  // plus paged metadata search calls per album. Gated to admins so it cannot
+  // be used to force-refresh (or, before the immich.ts fix alongside this,
+  // to empty) the shared cache from an unauthenticated request.
+  const forceFresh =
+    (sParams.fresh === '1' || sParams.preview === 'true') && (await isAdminAuthenticated());
 
   const config = getConfig();
 
@@ -382,9 +424,13 @@ export default async function PathPage({ params, searchParams }: PathPageProps) 
           ? loadEssayFromFile(result.subpage.essayFile)
           : null;
 
-      // Fetch assets from all subpage albums
+      // Fetch assets from the subpage's albums. An essay has no per-album
+      // gate to pass through, so an album with its own password stays out
+      // until it has been unlocked.
+      const cookieStore = await cookies();
+      const openAlbums = withoutLockedAlbums(albums, (name) => cookieStore.get(name)?.value);
       const allAlbums = await Promise.all(
-        albums.map((a) => immich.getAlbumBySlug(a.slug, slug, forceFresh)),
+        openAlbums.map((a) => immich.getAlbumBySlug(a.slug, slug, forceFresh)),
       );
       const allAssets = allAlbums.flatMap((a) => (a ? a.assets : []));
       const images = toPhotoItems(
@@ -400,7 +446,7 @@ export default async function PathPage({ params, searchParams }: PathPageProps) 
             title: result.subpage.title || result.subpage.name,
             subtitle: result.subpage.subtitle,
           },
-          blocks: albums.flatMap((a) => [
+          blocks: openAlbums.flatMap((a) => [
             { type: 'heading' as const, level: 2, text: a.albumName },
             ...a.assets.map((asset) => ({
               type: 'photo' as const,
@@ -508,6 +554,15 @@ export default async function PathPage({ params, searchParams }: PathPageProps) 
     const enabledSubpages = config.subpages.filter((sp) => sp.enabled !== false);
     const subpageIndex = enabledSubpages.findIndex((sp) => sp.slug === slug);
 
+    // The subpage that follows this one in the same list the nav/homepage
+    // build from — hidden and disabled subpages are already excluded there,
+    // so "next" never points somewhere the visitor could not otherwise reach
+    // (#591).
+    const navSubpages = await immich.getSubpages(forceFresh);
+    const navIndex = navSubpages.findIndex((sp) => sp.slug === slug);
+    const nextSubpage =
+      navIndex >= 0 && navIndex < navSubpages.length - 1 ? navSubpages[navIndex + 1] : undefined;
+
     return (
       <SubpageGridView
         slug={slug}
@@ -518,6 +573,9 @@ export default async function PathPage({ params, searchParams }: PathPageProps) 
         sections={result.subpage.sections}
         gridStyle={buildCoverGridStyle(result.subpage.coverGrid)}
         {...(subpageIndex >= 0 ? { index: subpageIndex + 1 } : {})}
+        {...(nextSubpage
+          ? { nextSubpage: { slug: nextSubpage.slug, name: nextSubpage.name } }
+          : {})}
       />
     );
   }
