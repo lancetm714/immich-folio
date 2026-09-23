@@ -27,6 +27,8 @@ export const de: Dictionary = {
     backTo: (label: string) => `Zurück zu ${label}`,
     backToGallery: 'Zurück zur Galerie',
     backToJournal: 'Zurück zum Journal',
+    email: 'E-Mail',
+    website: 'Website',
     home: 'Start',
     photos: (n: number) => plural(n, 'Foto', 'Fotos'),
     albums: (n: number) => plural(n, 'Album', 'Alben'),
@@ -43,6 +45,7 @@ export const de: Dictionary = {
     entryNavAria: 'Journal-Navigation',
     loadingGallery: 'Galerie wird geladen',
     loadingPhotos: 'Fotos werden geladen',
+    downloadAlbum: 'Album herunterladen',
   },
 
   home: {
@@ -59,6 +62,15 @@ export const de: Dictionary = {
       'Diese Website konnte gerade nicht geladen werden. Das ist meist vorübergehend — bitte gleich noch einmal versuchen.',
     tryAgain: 'Erneut versuchen',
     reference: (digest: string) => `Referenz: ${digest}`,
+  },
+
+  download: {
+    unavailableTitle: 'Download nicht möglich',
+    notAvailable: 'Dieser Download ist nicht verfügbar.',
+    rateLimited: 'Zu viele Download-Anfragen. Bitte einen Moment warten und erneut versuchen.',
+    immichUnavailable:
+      'Die Fotobibliothek ist gerade nicht erreichbar. Bitte gleich noch einmal versuchen.',
+    back: 'Zurück zur Galerie',
   },
 
   theme: {
@@ -118,6 +130,7 @@ export const de: Dictionary = {
 
   lightbox: {
     viewer: 'Bildansicht',
+    openPhoto: (n: number) => `Foto ${n} ansehen`,
     close: 'Schließen',
     closeTitle: 'Schließen (Esc)',
     previous: 'Vorheriges Foto',
@@ -178,7 +191,10 @@ export const de: Dictionary = {
     linkCopied: 'Link kopiert!',
     copyList: 'Textliste kopieren (#1, #2...)',
     listCopied: 'Liste kopiert!',
+    copyManualLink: 'Diesen Link kopieren',
+    copyManualList: 'Diese Liste kopieren',
     sendEmail: '✉️ E-Mail an den Fotografen',
+    downloadSelected: 'Auswahl herunterladen (.zip)',
     clearSelection: 'Auswahl löschen',
     confirmClear: 'Die gesamte Auswahl löschen?',
     listEmpty: (albumName: string) => `${albumName}: Keine Fotos ausgewählt.`,

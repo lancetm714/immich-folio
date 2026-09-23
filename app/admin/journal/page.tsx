@@ -1,5 +1,6 @@
-import { JournalStudio } from '../components/JournalStudio';
+import { JournalStudio } from '../components/journal/JournalStudio';
+import { getConfig } from '@/lib/config';
 
 export default function AdminJournalPage() {
-  return <JournalStudio />;
+  return <JournalStudio mapEnabled={getConfig().map} />;
 }

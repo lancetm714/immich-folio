@@ -33,8 +33,9 @@ export default function MapPage() {
 
   return (
     <>
-      {/* Leaflet CSS from CDN */}
-      {}
+      {/* LeafletMap emits this too, but only once /api/map has answered; on
+          this page the stylesheet should be in the server HTML so the tiles
+          never render before their CSS. Same href — the browser loads it once. */}
       <link
         rel="stylesheet"
         href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"

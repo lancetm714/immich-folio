@@ -60,6 +60,17 @@ interface PhotoGridProps {
   proofing?: boolean;
   /** Offer the "send by email" button in the proofing modal. */
   allowMailto?: boolean;
+  /**
+   * The ZIP endpoint for this album, when it offers downloads. Lets the
+   * proofing modal offer a "download selected" action (#475).
+   */
+  downloadArchiveUrl?: string;
+  /**
+   * The album's display name. Scopes the proofing favourites to this album —
+   * without it every album shares the provider's default storage key, so a
+   * selection made in one album leaks into the next.
+   */
+  albumName?: string;
 }
 
 function PhotoGridInner({
@@ -193,7 +204,7 @@ function PhotoGridInner({
             }}
             role="button"
             tabIndex={0}
-            aria-label={`View photo ${index + 1}`}
+            aria-label={t.lightbox.openPhoto(index + 1)}
             aria-haspopup="dialog"
             style={{
               ...(asset.dominantColor ? { backgroundColor: asset.dominantColor } : {}),
@@ -366,7 +377,12 @@ export function PhotoGrid(props: PhotoGridProps) {
   }
 
   return (
-    <ProofingProvider albumTokens={albumTokens} allowMailto={props.allowMailto ?? true}>
+    <ProofingProvider
+      albumTokens={albumTokens}
+      albumName={props.albumName}
+      allowMailto={props.allowMailto ?? true}
+      downloadArchiveUrl={props.downloadArchiveUrl}
+    >
       <PhotoGridInner {...props} />
     </ProofingProvider>
   );

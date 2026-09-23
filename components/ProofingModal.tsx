@@ -10,6 +10,13 @@ export function ProofingModal() {
   const t = useDictionary();
   const proofing = useProofing();
   const [copiedState, setCopiedState] = useState<'none' | 'link' | 'list'>('none');
+  /**
+   * What to show for copying by hand. `navigator.clipboard` only exists in a
+   * secure context, and a self-hosted portfolio reached over plain http on a
+   * LAN is not one — the buttons used to throw and appear to do nothing. The
+   * lightbox's permalink falls back the same way.
+   */
+  const [manualCopy, setManualCopy] = useState<'link' | 'list' | null>(null);
 
   /* Before the early `return null`: hooks must not run conditionally.
      `proofing` can be null, hence the optional calls. */
@@ -24,30 +31,67 @@ export function ProofingModal() {
     setIsModalOpen,
     getProofingUrl,
     getFormattedList,
+    getSelectedTokens,
     clearFavorites,
     allowMailto,
+    downloadArchiveUrl,
   } = proofing;
 
-  const handleCopyLink = () => {
-    const url = getProofingUrl();
-    navigator.clipboard.writeText(url).then(() => {
-      setCopiedState('link');
-      setTimeout(() => setCopiedState('none'), 2000);
-    });
+  // What the archive would actually receive. Gating on this rather than on
+  // `favorites.size` means a favourite left over from another album (they share
+  // the provider's storage key when no `albumName` is passed) can never light up
+  // a button that would post an empty selection and 404.
+  const selectedCount = getSelectedTokens().length;
+
+  /** Copy to the clipboard, or show the text to copy by hand where it is unavailable. */
+  const copy = (kind: 'link' | 'list', text: string) => {
+    if (!navigator.clipboard) {
+      setManualCopy(kind);
+      return;
+    }
+    navigator.clipboard.writeText(text).then(
+      () => {
+        setManualCopy(null);
+        setCopiedState(kind);
+        setTimeout(() => setCopiedState('none'), 2000);
+      },
+      () => setManualCopy(kind),
+    );
   };
 
-  const handleCopyList = () => {
-    const list = getFormattedList();
-    navigator.clipboard.writeText(list).then(() => {
-      setCopiedState('list');
-      setTimeout(() => setCopiedState('none'), 2000);
-    });
-  };
+  const handleCopyLink = () => copy('link', getProofingUrl());
+
+  const handleCopyList = () => copy('list', getFormattedList());
 
   const handleMailto = () => {
     const subject = encodeURIComponent(t.proofing.mailSubject(favorites.size));
     const body = encodeURIComponent(t.proofing.mailBody(getFormattedList(), getProofingUrl()));
     window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  };
+
+  const handleDownloadSelection = () => {
+    if (!downloadArchiveUrl) return;
+    const tokens = getSelectedTokens();
+    if (tokens.length === 0) return;
+
+    // A form POST, not a fetch: the browser streams the response straight to
+    // disk, so a large selection never has to fit in memory — a phone cannot
+    // hold a whole ZIP in a blob. The route answers with
+    // `Content-Disposition: attachment`, so the page stays where it was.
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = downloadArchiveUrl;
+    form.style.display = 'none';
+    for (const token of tokens) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'assets';
+      input.value = token;
+      form.appendChild(input);
+    }
+    document.body.appendChild(form);
+    form.submit();
+    form.remove();
   };
 
   return (
@@ -124,6 +168,47 @@ export function ProofingModal() {
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {downloadArchiveUrl && (
+            <button
+              type="button"
+              onClick={handleDownloadSelection}
+              disabled={selectedCount === 0}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem',
+                padding: '0.75rem 1rem',
+                borderRadius: 'var(--radius-sm, 6px)',
+                background: 'var(--accent, #e60012)',
+                color: '#fff',
+                border: 'none',
+                fontWeight: 500,
+                cursor: selectedCount === 0 ? 'not-allowed' : 'pointer',
+                opacity: selectedCount === 0 ? 0.6 : 1,
+              }}
+            >
+              <svg
+                aria-hidden="true"
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              {t.proofing.downloadSelected}
+            </button>
+          )}
+
+          {/* The primary action is the download when there is one; otherwise
+              copying the link stays the accent button it always was. */}
           <button
             type="button"
             onClick={handleCopyLink}
@@ -134,9 +219,13 @@ export function ProofingModal() {
               gap: '0.5rem',
               padding: '0.75rem 1rem',
               borderRadius: 'var(--radius-sm, 6px)',
-              background: 'var(--accent, #e60012)',
-              color: '#fff',
-              border: 'none',
+              ...(downloadArchiveUrl
+                ? {
+                    background: 'rgba(255,255,255,0.1)',
+                    color: 'inherit',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                  }
+                : { background: 'var(--accent, #e60012)', color: '#fff', border: 'none' }),
               fontWeight: 500,
               cursor: 'pointer',
             }}
@@ -179,6 +268,33 @@ export function ProofingModal() {
               </>
             )}
           </button>
+
+          {manualCopy && (
+            <div role="status" style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+              <label htmlFor="proofing-manual-copy" style={{ fontSize: '0.85rem', opacity: 0.8 }}>
+                {manualCopy === 'link' ? t.proofing.copyManualLink : t.proofing.copyManualList}
+              </label>
+              <textarea
+                id="proofing-manual-copy"
+                readOnly
+                autoFocus
+                rows={manualCopy === 'link' ? 2 : 4}
+                value={manualCopy === 'link' ? getProofingUrl() : getFormattedList()}
+                onFocus={(e) => e.currentTarget.select()}
+                style={{
+                  width: '100%',
+                  padding: '0.5rem 0.75rem',
+                  borderRadius: 'var(--radius-sm, 6px)',
+                  background: 'var(--bg-card-hover)',
+                  color: 'inherit',
+                  border: '1px solid var(--border-subtle)',
+                  font: 'inherit',
+                  fontSize: '0.85rem',
+                  resize: 'vertical',
+                }}
+              />
+            </div>
+          )}
 
           {allowMailto && (
             <button

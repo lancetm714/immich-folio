@@ -27,6 +27,9 @@ export const en = {
     backTo: (label: string) => `Back to ${label}`,
     backToGallery: 'Back to Gallery',
     backToJournal: 'Back to Journal',
+    /** Footer contact links, read out by screen readers. */
+    email: 'Email',
+    website: 'Website',
     home: 'Home',
     photos: (n: number) => plural(n, 'photo', 'photos'),
     albums: (n: number) => plural(n, 'album', 'albums'),
@@ -43,6 +46,7 @@ export const en = {
     entryNavAria: 'Journal entry navigation',
     loadingGallery: 'Loading gallery',
     loadingPhotos: 'Loading photos',
+    downloadAlbum: 'Download album',
   },
 
   home: {
@@ -59,6 +63,15 @@ export const en = {
       'This site could not be loaded right now. It is usually temporary — try again in a moment.',
     tryAgain: 'Try again',
     reference: (digest: string) => `Reference: ${digest}`,
+  },
+
+  /** The page the ZIP route answers a browser with when it refuses. */
+  download: {
+    unavailableTitle: 'Download unavailable',
+    notAvailable: 'This download is not available.',
+    rateLimited: 'Too many download requests. Please wait a moment and try again.',
+    immichUnavailable: 'The photo library is unavailable right now. Please try again shortly.',
+    back: 'Back to the gallery',
   },
 
   theme: {
@@ -118,6 +131,8 @@ export const en = {
 
   lightbox: {
     viewer: 'Image viewer',
+    /** A grid tile, which opens the viewer on that photo. */
+    openPhoto: (n: number) => `View photo ${n}`,
     close: 'Close',
     closeTitle: 'Close (Esc)',
     previous: 'Previous photo',
@@ -178,7 +193,11 @@ export const en = {
     linkCopied: 'Link Copied!',
     copyList: 'Copy Text List (#1, #2...)',
     listCopied: 'List Copied!',
+    /** Shown when the browser offers no clipboard (plain http) — copy by hand. */
+    copyManualLink: 'Copy this link',
+    copyManualList: 'Copy this list',
     sendEmail: '✉️ Send Email to Photographer',
+    downloadSelected: 'Download selected (.zip)',
     clearSelection: 'Clear Selection',
     confirmClear: 'Clear all selected favorites?',
     listEmpty: (albumName: string) => `${albumName}: No photos selected.`,
