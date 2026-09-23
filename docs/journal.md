@@ -137,8 +137,100 @@ real aspect ratios rather than forced equal:
 ![asset-uuid-left, asset-uuid-right](Optional caption)
 ```
 
+Three or more render as a grid — rows of up to three, each row justified like
+a pair (one shared height, widths from the real ratios, nothing cropped),
+stacked on phones:
+
+```markdown
+![uuid-1, uuid-2, uuid-3, uuid-4](Optional caption)
+```
+
 Photos in an entry open in the same lightbox as the rest of the site, with
 keyboard and swipe navigation.
+
+### Facts
+
+A `::facts` line followed by `Label: Value` lines in the same paragraph
+renders as a compact definition list — distance and elevation for a hike,
+date and venue for a wedding:
+
+```markdown
+::facts
+Distance: 21 km
+Elevation: 1,240 m
+Start: 08:30
+```
+
+The first colon splits label from value, so a time keeps its `:`. Values take
+the same inline markdown as text. Lines without a colon are ignored.
+
+### Map
+
+A `::map` line, with an optional caption after it, starts a map. The lines
+after it say what is on it — numbered pins in the order written, joined by
+a line:
+
+```markdown
+::map Busan → Seoul
+Busan harbour: 35.098, 129.036
+photo: 8f1c0e2a-…
+photos: all
+Seoul: 37.566, 126.978
+line: off
+```
+
+| Line              | Puts on the map                                                                                   |
+| ----------------- | ------------------------------------------------------------------------------------------------- |
+| `Label: lat, lng` | A point with a label, exactly where you typed it.                                                 |
+| `lat, lng`        | A point without a label.                                                                          |
+| `photo: <uuid>`   | One of the entry's photos, placed by its GPS. Several ids may follow, comma-separated.            |
+| `photos: all`     | Every geotagged photo in the entry, in the order they appear — skipping ids already listed above. |
+| `line: off`       | No connecting line. The default draws one when there are two or more pins.                        |
+
+A map with no lines renders nothing. `photo`, `photos` and `line` are reserved
+as labels; a coordinate pair that does not parse, or lies outside ±90 / ±180,
+is ignored (the Studio warns before you save).
+
+Typed points are published as typed — they are your content. Photo pins are
+derived from EXIF, so they follow each album's `location:` setting the way
+the map page does: `hidden` and `country` add no pin, `city` snaps to the
+same 5 km grid, and where an album allows exact positions a journal pin is
+still snapped to a 1 km grid — the map page shows the mean of an album's
+photos in a city, never a single photo, and a story map should not be the
+first surface that places one photo at its doorstep. Photo pins are computed
+when the page renders; the Studio's preview shows typed points right away and
+leaves photo pins for the live page.
+
+The block renders only while `map: true` is set in `settings.yaml`, typed
+points included — that setting also means "no map tiles from CartoDB for my
+visitors".
+
+### Album
+
+"The first twelve of the Seoul album", without picking each photo:
+
+```markdown
+::album 371336b4-eb59-409c-b24e-a613f81ede5a
+count: 12
+skip: 0
+layout: grid
+caption: Twelve from Seoul
+```
+
+| Line           | Meaning                                                                         |
+| -------------- | ------------------------------------------------------------------------------- |
+| `::album <id>` | The Immich album id — the Studio's album picker fills it in.                    |
+| `count: N`     | How many photos. Default: the whole album.                                      |
+| `skip: N`      | Offset, so two blocks can split one album. Default 0.                           |
+| `layout: …`    | `grid` (rows of three, default), `pairs` (rows of two) or `wide` (one per row). |
+| `caption: …`   | One caption under the set.                                                      |
+
+The block is expanded into ordinary photo blocks when the page renders, so
+the lightbox and everything else work as for hand-picked photos. Photos come
+in the album's order; if the gallery pins a manual `assetOrder` for that
+album, those come first. The album need not be published in `gallery.yaml` —
+an entry may already show any single photo by id, and the author's pick is
+the gate for a whole album just the same.
 
 <p align="center">
   <img src="screenshots/journal-entry.png" width="98%" alt="A rendered journal entry with heading, body text, a fullbleed photo and a quote" />
@@ -147,7 +239,10 @@ keyboard and swipe navigation.
 
 > [!TIP]
 > Writing asset UUIDs by hand is tedious. In the [Journal Studio](#journal-studio),
-> **Add Block → Photo** opens the asset picker and fills the UUID in for you.
+> **Add Block → Photo**, **2-Photo Pair** and **Photo Grid** open the asset
+> picker and fill the UUIDs in for you; **Facts** and **Map** have their own
+> small forms. New entries can also start from a template — Wedding, Hiking,
+> Travel and the others — instead of an empty editor.
 
 ## Drafts
 

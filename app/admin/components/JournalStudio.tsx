@@ -1,9 +1,15 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import type { JournalEntrySummary, ParsedJournal, JournalBlock } from '@/lib/journal';
-import { parseJournalMarkdown, serializeJournalMarkdown, sanitizeSlug } from '@/lib/journal';
+import type { JournalEntrySummary, ParsedJournal, JournalBlock, MapItem } from '@/lib/journal';
+import {
+  parseJournalMarkdown,
+  serializeJournalMarkdown,
+  sanitizeSlug,
+  collectAssetIds,
+  isValidCoordinate,
+} from '@/lib/journal';
 import { JOURNAL_TEMPLATES } from '@/lib/journalTemplates';
 import {
   IconFileText,
@@ -23,8 +29,17 @@ import {
   IconCalendar,
   IconLock,
   IconCheck,
+  IconGrid,
+  IconColumns,
+  IconMap,
+  IconFolder,
+  IconX,
 } from './Icons';
 import AssetPicker from './AssetPicker';
+import AlbumPicker from './AlbumPicker';
+import { SortableBlockList, SortableBlockCard } from './SortableBlocks';
+import { arrayMove } from '@dnd-kit/sortable';
+import { expandAlbumBlocks, type AlbumAssetRef } from '@/lib/journalAlbum';
 import { BlockBadge } from './BlockBadge';
 import { useUnsavedGuard } from './useUnsavedGuard';
 import { reportIfSessionExpired } from './sessionExpiry';
@@ -35,9 +50,11 @@ import './journal-studio.css';
 interface JournalStudioProps {
   /** Entry to open, taken from the /admin/journal/[slug] route. */
   slug?: string;
+  /** `config.map`, passed by the server route: a map block renders only when the site has a map. */
+  mapEnabled?: boolean;
 }
 
-export function JournalStudio({ slug: activeSlug }: JournalStudioProps) {
+export function JournalStudio({ slug: activeSlug, mapEnabled }: JournalStudioProps) {
   const router = useRouter();
   const [entries, setEntries] = useState<JournalEntrySummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -150,7 +167,13 @@ export function JournalStudio({ slug: activeSlug }: JournalStudioProps) {
   };
 
   if (activeSlug) {
-    return <JournalEditor slug={activeSlug} onBack={() => router.push('/admin/journal')} />;
+    return (
+      <JournalEditor
+        slug={activeSlug}
+        mapEnabled={mapEnabled}
+        onBack={() => router.push('/admin/journal')}
+      />
+    );
   }
 
   return (
@@ -392,6 +415,7 @@ export function JournalStudio({ slug: activeSlug }: JournalStudioProps) {
 
 interface JournalEditorProps {
   slug: string;
+  mapEnabled?: boolean;
   onBack: () => void;
 }
 
@@ -413,7 +437,7 @@ const SPLIT_MIN = 25;
 const SPLIT_MAX = 70;
 const SPLIT_DEFAULT = 46;
 
-function JournalEditor({ slug, onBack }: JournalEditorProps) {
+function JournalEditor({ slug, mapEnabled, onBack }: JournalEditorProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -539,15 +563,7 @@ function JournalEditor({ slug, onBack }: JournalEditorProps) {
     const updated: ParsedJournal = {
       ...parsed,
       blocks: newBlocks,
-      referencedAssetIds: Array.from(
-        new Set(
-          newBlocks.flatMap((b) => {
-            if (b.type === 'photo') return [b.assetId];
-            if (b.type === 'photo-pair') return b.assetIds;
-            return [];
-          }),
-        ),
-      ),
+      referencedAssetIds: collectAssetIds(newBlocks),
     };
     const serialized = serializeJournalMarkdown(updated);
     setParsed(updated);
@@ -613,6 +629,67 @@ function JournalEditor({ slug, onBack }: JournalEditorProps) {
   }, [handleSave]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /*
+   * Album blocks are expanded for the preview the way the page expands them,
+   * from the admin assets route; until an album has loaded its block simply
+   * does not render. The picker's album list is fetched on first use.
+   */
+  const [albumAssets, setAlbumAssets] = useState<Record<string, AlbumAssetRef[]>>({});
+  const albumRequested = useRef(new Set<string>());
+  const [albumList, setAlbumList] = useState<Parameters<typeof AlbumPicker>[0]['albums'] | null>(
+    null,
+  );
+  const [albumPickerTarget, setAlbumPickerTarget] = useState<((albumId: string) => void) | null>(
+    null,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    for (const block of parsed.blocks) {
+      if (block.type !== 'album' || !block.albumId || albumRequested.current.has(block.albumId))
+        continue;
+      const albumId = block.albumId;
+      albumRequested.current.add(albumId);
+      fetch(`/api/admin/albums/${albumId}/assets?types=all`)
+        .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
+        .then((data: { assets: AlbumAssetRef[] }) => {
+          if (!cancelled) setAlbumAssets((prev) => ({ ...prev, [albumId]: data.assets }));
+        })
+        .catch(() => {
+          // Let a retry happen after a save or a re-pick.
+          albumRequested.current.delete(albumId);
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [parsed.blocks]);
+
+  const openAlbumPicker = (onSelect: (albumId: string) => void) => {
+    setAlbumPickerTarget(() => onSelect);
+    if (albumList === null) {
+      fetch('/api/admin/albums')
+        .then((res) => res.json())
+        .then((data) => setAlbumList(data.albums ?? []))
+        .catch(() => setAlbumList([]));
+    }
+  };
+
+  const previewBlocks = useMemo(
+    () => expandAlbumBlocks(parsed.blocks, (id) => albumAssets[id]).blocks,
+    [parsed.blocks, albumAssets],
+  );
+  const previewIds = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          ...(parsed.frontmatter.coverAssetId ? [parsed.frontmatter.coverAssetId] : []),
+          ...collectAssetIds(previewBlocks),
+        ]),
+      ),
+    [previewBlocks, parsed.frontmatter.coverAssetId],
+  );
+
+  /*
    * The preview used to hard-code 3:2 for every photo, so the studio showed a
    * cropped, uniform grid while the published page laid the photos out by their
    * real proportions. There is no admin endpoint that reports asset dimensions,
@@ -622,7 +699,7 @@ function JournalEditor({ slug, onBack }: JournalEditorProps) {
 
   useEffect(() => {
     let cancelled = false;
-    for (const id of parsed.referencedAssetIds) {
+    for (const id of previewIds) {
       if (!id || measuredRef.current.has(id)) continue;
       measuredRef.current.add(id);
 
@@ -644,7 +721,7 @@ function JournalEditor({ slug, onBack }: JournalEditorProps) {
     return () => {
       cancelled = true;
     };
-  }, [parsed.referencedAssetIds]);
+  }, [previewIds]);
 
   // Block manipulation
   const handleAddBlock = (type: JournalBlock['type']) => {
@@ -665,6 +742,24 @@ function JournalEditor({ slug, onBack }: JournalEditorProps) {
       case 'photo-pair':
         newBlock = { type: 'photo-pair', assetIds: ['', ''], caption: '' };
         break;
+      case 'photo-grid':
+        newBlock = { type: 'photo-grid', assetIds: ['', '', ''], caption: '' };
+        break;
+      case 'facts':
+        newBlock = {
+          type: 'facts',
+          items: [
+            { label: '', value: '' },
+            { label: '', value: '' },
+          ],
+        };
+        break;
+      case 'map':
+        newBlock = { type: 'map', caption: '', line: true, items: [] };
+        break;
+      case 'album':
+        newBlock = { type: 'album', albumId: '', layout: 'grid' };
+        break;
     }
     handleBlocksChange([...parsed.blocks, newBlock]);
   };
@@ -678,6 +773,10 @@ function JournalEditor({ slug, onBack }: JournalEditorProps) {
     handleBlocksChange(blocks);
   };
 
+  const handleReorderBlock = (from: number, to: number) => {
+    handleBlocksChange(arrayMove(parsed.blocks, from, to));
+  };
+
   const handleDeleteBlock = (index: number) => {
     handleBlocksChange(parsed.blocks.filter((_, i) => i !== index));
   };
@@ -689,7 +788,7 @@ function JournalEditor({ slug, onBack }: JournalEditorProps) {
   };
 
   // Mock PhotoItems for preview
-  const previewAssets: PhotoItem[] = parsed.referencedAssetIds.map((id) => ({
+  const previewAssets: PhotoItem[] = previewIds.map((id) => ({
     id,
     type: 'image',
     thumbUrl: `/api/admin/thumbnail/${id}`,
@@ -851,6 +950,13 @@ function JournalEditor({ slug, onBack }: JournalEditorProps) {
                 >
                   <IconQuote size={13} /> + Quote
                 </button>
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-xs"
+                  onClick={() => handleAddBlock('facts')}
+                >
+                  <IconColumns size={13} /> + Facts
+                </button>
                 <div className="essay-toolbar-divider" />
                 <button
                   type="button"
@@ -866,263 +972,755 @@ function JournalEditor({ slug, onBack }: JournalEditorProps) {
                 >
                   <IconArrowLeftRight size={13} /> + 2-Photo Pair
                 </button>
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-xs admin-btn-primary"
+                  onClick={() => handleAddBlock('photo-grid')}
+                >
+                  <IconGrid size={13} /> + Photo Grid
+                </button>
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-xs admin-btn-primary"
+                  onClick={() => handleAddBlock('album')}
+                >
+                  <IconFolder size={13} /> + Album
+                </button>
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-xs"
+                  onClick={() => handleAddBlock('map')}
+                >
+                  <IconMap size={13} /> + Map
+                </button>
               </div>
 
               {/* Blocks List */}
-              <div
-                style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}
-              >
-                {parsed.blocks.map((block, idx) => (
-                  <div key={idx} className="essay-block-card">
-                    <div className="essay-block-card-header">
-                      <BlockBadge type={block.type} />
-                      <div className="essay-block-actions">
-                        <button
-                          type="button"
-                          className="admin-btn admin-btn-xs"
-                          disabled={idx === 0}
-                          onClick={() => handleMoveBlock(idx, 'up')}
-                        >
-                          <IconChevronUp size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          className="admin-btn admin-btn-xs"
-                          disabled={idx === parsed.blocks.length - 1}
-                          onClick={() => handleMoveBlock(idx, 'down')}
-                        >
-                          <IconChevronDown size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          className="admin-btn admin-btn-xs admin-btn-danger"
-                          onClick={() => handleDeleteBlock(idx)}
-                        >
-                          <IconTrash size={12} />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div style={{ marginTop: '0.75rem' }}>
-                      {block.type === 'heading' && (
-                        <div className="journal-heading-row">
-                          <select
-                            aria-label="Heading level"
-                            className="admin-input journal-level-select"
-                            value={block.level}
-                            onChange={(e) =>
-                              handleUpdateBlock(idx, { ...block, level: Number(e.target.value) })
-                            }
+              <SortableBlockList count={parsed.blocks.length} onReorder={handleReorderBlock}>
+                <div
+                  style={{
+                    marginTop: '1rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '1rem',
+                  }}
+                >
+                  {parsed.blocks.map((block, idx) => (
+                    <SortableBlockCard
+                      key={idx}
+                      index={idx}
+                      badge={<BlockBadge type={block.type} />}
+                      actions={
+                        <div className="essay-block-actions">
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-xs"
+                            disabled={idx === 0}
+                            aria-label="Move block up"
+                            onClick={() => handleMoveBlock(idx, 'up')}
                           >
-                            <option value={1}>H1</option>
-                            <option value={2}>H2</option>
-                            <option value={3}>H3</option>
-                          </select>
-                          <input
-                            type="text"
-                            className="admin-input"
-                            value={block.text}
-                            onChange={(e) =>
-                              handleUpdateBlock(idx, { ...block, text: e.target.value })
-                            }
-                          />
+                            <IconChevronUp size={12} />
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-xs"
+                            disabled={idx === parsed.blocks.length - 1}
+                            aria-label="Move block down"
+                            onClick={() => handleMoveBlock(idx, 'down')}
+                          >
+                            <IconChevronDown size={12} />
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-xs admin-btn-danger"
+                            aria-label="Delete block"
+                            onClick={() => handleDeleteBlock(idx)}
+                          >
+                            <IconTrash size={12} />
+                          </button>
                         </div>
-                      )}
+                      }
+                    >
+                      <div style={{ marginTop: '0.75rem' }}>
+                        {block.type === 'heading' && (
+                          <div className="journal-heading-row">
+                            <select
+                              aria-label="Heading level"
+                              className="admin-input journal-level-select"
+                              value={block.level}
+                              onChange={(e) =>
+                                handleUpdateBlock(idx, { ...block, level: Number(e.target.value) })
+                              }
+                            >
+                              <option value={1}>H1</option>
+                              <option value={2}>H2</option>
+                              <option value={3}>H3</option>
+                            </select>
+                            <input
+                              type="text"
+                              className="admin-input"
+                              value={block.text}
+                              onChange={(e) =>
+                                handleUpdateBlock(idx, { ...block, text: e.target.value })
+                              }
+                            />
+                          </div>
+                        )}
 
-                      {block.type === 'paragraph' && (
-                        <textarea
-                          className="admin-input"
-                          rows={3}
-                          value={block.html}
-                          onChange={(e) =>
-                            handleUpdateBlock(idx, { ...block, html: e.target.value })
-                          }
-                        />
-                      )}
-
-                      {block.type === 'quote' && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {block.type === 'paragraph' && (
                           <textarea
                             className="admin-input"
-                            rows={2}
-                            value={block.text}
-                            placeholder="Quote text..."
+                            rows={3}
+                            value={block.html}
                             onChange={(e) =>
-                              handleUpdateBlock(idx, { ...block, text: e.target.value })
+                              handleUpdateBlock(idx, { ...block, html: e.target.value })
                             }
                           />
-                          <input
-                            type="text"
-                            className="admin-input"
-                            value={block.author || ''}
-                            placeholder="Author attribution (optional)"
-                            onChange={(e) =>
-                              handleUpdateBlock(idx, { ...block, author: e.target.value })
-                            }
-                          />
-                        </div>
-                      )}
+                        )}
 
-                      {block.type === 'photo' && isLegacyAssetRef(block.assetId) && (
-                        <p className="journal-block-warning">
-                          Reference &quot;{block.assetId}&quot; is a legacy album position, not a
-                          photo. It will not appear on the published page — pick a photo below.
-                        </p>
-                      )}
-
-                      {block.type === 'photo' && (
-                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                          <div
-                            style={{
-                              width: '140px',
-                              height: '96px',
-                              flexShrink: 0,
-                              background: 'rgba(0,0,0,0.3)',
-                              borderRadius: '6px',
-                              overflow: 'hidden',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              cursor: 'pointer',
-                            }}
-                            onClick={() =>
-                              setAssetPickerTarget({
-                                title: 'Select Photo for Story',
-                                onSelect: (id) => handleUpdateBlock(idx, { ...block, assetId: id }),
-                              })
-                            }
-                          >
-                            {block.assetId ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={`/api/admin/thumbnail/${block.assetId}`}
-                                alt="Thumb"
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                              />
-                            ) : (
-                              <span style={{ fontSize: '0.8rem', opacity: 0.6 }}>+ Pick</span>
-                            )}
+                        {block.type === 'quote' && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <textarea
+                              className="admin-input"
+                              rows={2}
+                              value={block.text}
+                              placeholder="Quote text..."
+                              onChange={(e) =>
+                                handleUpdateBlock(idx, { ...block, text: e.target.value })
+                              }
+                            />
+                            <input
+                              type="text"
+                              className="admin-input"
+                              value={block.author || ''}
+                              placeholder="Author attribution (optional)"
+                              onChange={(e) =>
+                                handleUpdateBlock(idx, { ...block, author: e.target.value })
+                              }
+                            />
                           </div>
+                        )}
 
-                          <div
-                            style={{
-                              flexGrow: 1,
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '6px',
-                            }}
-                          >
-                            <div className="journal-photo-layout-row">
-                              <select
-                                aria-label="Photo layout"
+                        {block.type === 'photo' && isLegacyAssetRef(block.assetId) && (
+                          <p className="journal-block-warning">
+                            Reference &quot;{block.assetId}&quot; is a legacy album position, not a
+                            photo. It will not appear on the published page — pick a photo below.
+                          </p>
+                        )}
+
+                        {block.type === 'photo' && (
+                          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                            <div
+                              style={{
+                                width: '140px',
+                                height: '96px',
+                                flexShrink: 0,
+                                background: 'rgba(0,0,0,0.3)',
+                                borderRadius: '6px',
+                                overflow: 'hidden',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                              }}
+                              onClick={() =>
+                                setAssetPickerTarget({
+                                  title: 'Select Photo for Story',
+                                  onSelect: (id) =>
+                                    handleUpdateBlock(idx, { ...block, assetId: id }),
+                                })
+                              }
+                            >
+                              {block.assetId ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={`/api/admin/thumbnail/${block.assetId}`}
+                                  alt="Thumb"
+                                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                />
+                              ) : (
+                                <span style={{ fontSize: '0.8rem', opacity: 0.6 }}>+ Pick</span>
+                              )}
+                            </div>
+
+                            <div
+                              style={{
+                                flexGrow: 1,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '6px',
+                              }}
+                            >
+                              <div className="journal-photo-layout-row">
+                                <select
+                                  aria-label="Photo layout"
+                                  className="admin-input"
+                                  value={block.layout}
+                                  onChange={(e) =>
+                                    handleUpdateBlock(idx, {
+                                      ...block,
+                                      layout: e.target.value as 'contained' | 'wide' | 'fullbleed',
+                                    })
+                                  }
+                                >
+                                  <option value="contained">Contained (Column Width)</option>
+                                  <option value="wide">Wide (Expanded Width)</option>
+                                  <option value="fullbleed">Fullbleed (Edge to Edge)</option>
+                                </select>
+                                <button
+                                  type="button"
+                                  className="admin-btn admin-btn-xs"
+                                  onClick={() =>
+                                    setAssetPickerTarget({
+                                      title: 'Select Photo for Story',
+                                      onSelect: (id) =>
+                                        handleUpdateBlock(idx, { ...block, assetId: id }),
+                                    })
+                                  }
+                                >
+                                  Change Photo
+                                </button>
+                              </div>
+                              <input
+                                type="text"
                                 className="admin-input"
-                                value={block.layout}
+                                placeholder="Caption (optional)"
+                                value={block.caption || ''}
                                 onChange={(e) =>
-                                  handleUpdateBlock(idx, {
-                                    ...block,
-                                    layout: e.target.value as 'contained' | 'wide' | 'fullbleed',
-                                  })
+                                  handleUpdateBlock(idx, { ...block, caption: e.target.value })
                                 }
-                              >
-                                <option value="contained">Contained (Column Width)</option>
-                                <option value="wide">Wide (Expanded Width)</option>
-                                <option value="fullbleed">Fullbleed (Edge to Edge)</option>
-                              </select>
-                              <button
-                                type="button"
-                                className="admin-btn admin-btn-xs"
-                                onClick={() =>
-                                  setAssetPickerTarget({
-                                    title: 'Select Photo for Story',
-                                    onSelect: (id) =>
-                                      handleUpdateBlock(idx, { ...block, assetId: id }),
-                                  })
-                                }
-                              >
-                                Change Photo
-                              </button>
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {block.type === 'photo-pair' && block.assetIds.some(isLegacyAssetRef) && (
+                          <p className="journal-block-warning">
+                            References &quot;{block.assetIds.filter(isLegacyAssetRef).join('", "')}
+                            &quot; are legacy album positions, not photos. They will not appear on
+                            the published page — pick photos below.
+                          </p>
+                        )}
+
+                        {block.type === 'photo-pair' && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: '1fr 1fr',
+                                gap: '1rem',
+                              }}
+                            >
+                              {[0, 1].map((pIdx) => (
+                                <div
+                                  key={pIdx}
+                                  style={{
+                                    height: '90px',
+                                    background: 'rgba(0,0,0,0.3)',
+                                    borderRadius: '6px',
+                                    overflow: 'hidden',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'pointer',
+                                    border: '1px dashed rgba(255,255,255,0.15)',
+                                  }}
+                                  onClick={() =>
+                                    setAssetPickerTarget({
+                                      title: `Select Photo #${pIdx + 1} for Pair`,
+                                      onSelect: (id) => {
+                                        const newIds = [...block.assetIds] as [string, string];
+                                        newIds[pIdx] = id;
+                                        handleUpdateBlock(idx, { ...block, assetIds: newIds });
+                                      },
+                                    })
+                                  }
+                                >
+                                  {block.assetIds[pIdx] ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      src={`/api/admin/thumbnail/${block.assetIds[pIdx]}`}
+                                      alt="Thumb"
+                                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                    />
+                                  ) : (
+                                    <span style={{ fontSize: '0.8rem', opacity: 0.6 }}>
+                                      + Pick Photo #{pIdx + 1}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
                             </div>
                             <input
                               type="text"
                               className="admin-input"
-                              placeholder="Caption (optional)"
+                              placeholder="Shared caption for pair (optional)"
                               value={block.caption || ''}
                               onChange={(e) =>
                                 handleUpdateBlock(idx, { ...block, caption: e.target.value })
                               }
                             />
                           </div>
-                        </div>
-                      )}
+                        )}
 
-                      {block.type === 'photo-pair' && block.assetIds.some(isLegacyAssetRef) && (
-                        <p className="journal-block-warning">
-                          References &quot;{block.assetIds.filter(isLegacyAssetRef).join('", "')}
-                          &quot; are legacy album positions, not photos. They will not appear on the
-                          published page — pick photos below.
-                        </p>
-                      )}
+                        {block.type === 'photo-grid' && block.assetIds.some(isLegacyAssetRef) && (
+                          <p className="journal-block-warning">
+                            References &quot;{block.assetIds.filter(isLegacyAssetRef).join('", "')}
+                            &quot; are legacy album positions, not photos. They will not appear on
+                            the published page — pick photos below.
+                          </p>
+                        )}
 
-                      {block.type === 'photo-pair' && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                          <div
-                            style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}
-                          >
-                            {[0, 1].map((pIdx) => (
-                              <div
-                                key={pIdx}
-                                style={{
-                                  height: '90px',
-                                  background: 'rgba(0,0,0,0.3)',
-                                  borderRadius: '6px',
-                                  overflow: 'hidden',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  cursor: 'pointer',
-                                  border: '1px dashed rgba(255,255,255,0.15)',
-                                }}
+                        {block.type === 'photo-grid' && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div className="journal-grid-tiles">
+                              {block.assetIds.map((assetId, pIdx) => (
+                                <div key={pIdx} className="journal-grid-tile">
+                                  <div
+                                    className="journal-grid-tile-pick"
+                                    onClick={() =>
+                                      setAssetPickerTarget({
+                                        title: `Select Photo #${pIdx + 1} for Grid`,
+                                        onSelect: (id) => {
+                                          const newIds = [...block.assetIds];
+                                          newIds[pIdx] = id;
+                                          handleUpdateBlock(idx, { ...block, assetIds: newIds });
+                                        },
+                                      })
+                                    }
+                                  >
+                                    {assetId ? (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img src={`/api/admin/thumbnail/${assetId}`} alt="Thumb" />
+                                    ) : (
+                                      <span>+ Pick #{pIdx + 1}</span>
+                                    )}
+                                  </div>
+                                  {block.assetIds.length > 3 && (
+                                    <button
+                                      type="button"
+                                      className="admin-btn admin-btn-xs journal-grid-tile-remove"
+                                      aria-label={`Remove photo #${pIdx + 1}`}
+                                      onClick={() =>
+                                        handleUpdateBlock(idx, {
+                                          ...block,
+                                          assetIds: block.assetIds.filter((_, i) => i !== pIdx),
+                                        })
+                                      }
+                                    >
+                                      <IconX size={11} />
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                              <button
+                                type="button"
+                                className="admin-btn admin-btn-xs"
                                 onClick={() =>
-                                  setAssetPickerTarget({
-                                    title: `Select Photo #${pIdx + 1} for Pair`,
-                                    onSelect: (id) => {
-                                      const newIds = [...block.assetIds] as [string, string];
-                                      newIds[pIdx] = id;
-                                      handleUpdateBlock(idx, { ...block, assetIds: newIds });
-                                    },
+                                  handleUpdateBlock(idx, {
+                                    ...block,
+                                    assetIds: [...block.assetIds, ''],
                                   })
                                 }
                               >
-                                {block.assetIds[pIdx] ? (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img
-                                    src={`/api/admin/thumbnail/${block.assetIds[pIdx]}`}
-                                    alt="Thumb"
-                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                  />
-                                ) : (
-                                  <span style={{ fontSize: '0.8rem', opacity: 0.6 }}>
-                                    + Pick Photo #{pIdx + 1}
-                                  </span>
-                                )}
+                                <IconPlus size={12} /> Add photo
+                              </button>
+                              <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>
+                                Three or more photos, laid out in rows of three.
+                              </span>
+                            </div>
+                            <input
+                              type="text"
+                              className="admin-input"
+                              placeholder="Shared caption for grid (optional)"
+                              value={block.caption || ''}
+                              onChange={(e) =>
+                                handleUpdateBlock(idx, { ...block, caption: e.target.value })
+                              }
+                            />
+                          </div>
+                        )}
+
+                        {block.type === 'facts' && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {block.items.map((item, fIdx) => (
+                              <div key={fIdx} className="journal-facts-row">
+                                <input
+                                  type="text"
+                                  className="admin-input"
+                                  placeholder="Label, e.g. Distance"
+                                  value={item.label}
+                                  onChange={(e) =>
+                                    handleUpdateBlock(idx, {
+                                      ...block,
+                                      items: block.items.map((it, i) =>
+                                        i === fIdx ? { ...it, label: e.target.value } : it,
+                                      ),
+                                    })
+                                  }
+                                />
+                                <input
+                                  type="text"
+                                  className="admin-input"
+                                  placeholder="Value, e.g. 21 km"
+                                  value={item.value}
+                                  onChange={(e) =>
+                                    handleUpdateBlock(idx, {
+                                      ...block,
+                                      items: block.items.map((it, i) =>
+                                        i === fIdx ? { ...it, value: e.target.value } : it,
+                                      ),
+                                    })
+                                  }
+                                />
+                                <button
+                                  type="button"
+                                  className="admin-btn admin-btn-xs"
+                                  aria-label={`Remove fact #${fIdx + 1}`}
+                                  disabled={block.items.length <= 1}
+                                  onClick={() =>
+                                    handleUpdateBlock(idx, {
+                                      ...block,
+                                      items: block.items.filter((_, i) => i !== fIdx),
+                                    })
+                                  }
+                                >
+                                  <IconX size={11} />
+                                </button>
                               </div>
                             ))}
+                            <div>
+                              <button
+                                type="button"
+                                className="admin-btn admin-btn-xs"
+                                onClick={() =>
+                                  handleUpdateBlock(idx, {
+                                    ...block,
+                                    items: [...block.items, { label: '', value: '' }],
+                                  })
+                                }
+                              >
+                                <IconPlus size={12} /> Add fact
+                              </button>
+                            </div>
                           </div>
-                          <input
-                            type="text"
-                            className="admin-input"
-                            placeholder="Shared caption for pair (optional)"
-                            value={block.caption || ''}
-                            onChange={(e) =>
-                              handleUpdateBlock(idx, { ...block, caption: e.target.value })
-                            }
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                        )}
+
+                        {block.type === 'album' && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div className="journal-album-row">
+                              <button
+                                type="button"
+                                className="admin-btn admin-btn-xs admin-btn-primary"
+                                onClick={() =>
+                                  openAlbumPicker((albumId) =>
+                                    handleUpdateBlock(idx, { ...block, albumId }),
+                                  )
+                                }
+                              >
+                                <IconFolder size={12} />{' '}
+                                {block.albumId
+                                  ? (albumList?.find((a) => a.id === block.albumId)?.albumName ??
+                                    'Change album')
+                                  : 'Pick album'}
+                              </button>
+                              {block.albumId && (
+                                <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>
+                                  {albumAssets[block.albumId]
+                                    ? `${albumAssets[block.albumId].length} photos in album`
+                                    : 'loading…'}
+                                </span>
+                              )}
+                            </div>
+                            <div className="journal-album-row">
+                              <label className="journal-album-field">
+                                Count
+                                <input
+                                  type="number"
+                                  min={1}
+                                  className="admin-input"
+                                  placeholder="all"
+                                  value={block.count ?? ''}
+                                  onChange={(e) =>
+                                    handleUpdateBlock(idx, {
+                                      ...block,
+                                      count: e.target.value ? Number(e.target.value) : undefined,
+                                    })
+                                  }
+                                />
+                              </label>
+                              <label className="journal-album-field">
+                                Skip
+                                <input
+                                  type="number"
+                                  min={0}
+                                  className="admin-input"
+                                  placeholder="0"
+                                  value={block.skip ?? ''}
+                                  onChange={(e) =>
+                                    handleUpdateBlock(idx, {
+                                      ...block,
+                                      skip: e.target.value ? Number(e.target.value) : undefined,
+                                    })
+                                  }
+                                />
+                              </label>
+                              <label className="journal-album-field">
+                                Layout
+                                <select
+                                  className="admin-input"
+                                  value={block.layout}
+                                  onChange={(e) =>
+                                    handleUpdateBlock(idx, {
+                                      ...block,
+                                      layout: e.target.value as 'grid' | 'pairs' | 'wide',
+                                    })
+                                  }
+                                >
+                                  <option value="grid">Grid (rows of three)</option>
+                                  <option value="pairs">Pairs (rows of two)</option>
+                                  <option value="wide">Wide (one per row)</option>
+                                </select>
+                              </label>
+                            </div>
+                            <input
+                              type="text"
+                              className="admin-input"
+                              placeholder="Caption for the set (optional)"
+                              value={block.caption || ''}
+                              onChange={(e) =>
+                                handleUpdateBlock(idx, {
+                                  ...block,
+                                  caption: e.target.value || undefined,
+                                })
+                              }
+                            />
+                            <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>
+                              Photos follow the album&apos;s order (a manual order in the gallery
+                              comes first). Count and skip pick a slice; leave count empty for all.
+                            </span>
+                          </div>
+                        )}
+
+                        {block.type === 'map' && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {mapEnabled === false && (
+                              <p className="journal-block-warning">
+                                The map is switched off in Settings → General. This block will not
+                                render until it is enabled.
+                              </p>
+                            )}
+                            <input
+                              type="text"
+                              className="admin-input"
+                              placeholder="Caption, e.g. Busan → Seoul (optional)"
+                              value={block.caption || ''}
+                              onChange={(e) =>
+                                handleUpdateBlock(idx, { ...block, caption: e.target.value })
+                              }
+                            />
+
+                            {block.items.map((item, mIdx) => {
+                              const setItem = (next: MapItem) =>
+                                handleUpdateBlock(idx, {
+                                  ...block,
+                                  items: block.items.map((it, i) => (i === mIdx ? next : it)),
+                                });
+                              const move = (dir: -1 | 1) => {
+                                const items = [...block.items];
+                                const target = mIdx + dir;
+                                if (target < 0 || target >= items.length) return;
+                                [items[mIdx], items[target]] = [items[target], items[mIdx]];
+                                handleUpdateBlock(idx, { ...block, items });
+                              };
+                              return (
+                                <div key={mIdx} className="journal-map-row">
+                                  <span className="journal-map-index">{mIdx + 1}</span>
+                                  {item.kind === 'point' && (
+                                    <>
+                                      <input
+                                        type="text"
+                                        className="admin-input"
+                                        placeholder="Label (optional)"
+                                        value={item.label ?? ''}
+                                        onChange={(e) =>
+                                          setItem({ ...item, label: e.target.value || undefined })
+                                        }
+                                      />
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        className="admin-input journal-map-coord"
+                                        placeholder="Lat"
+                                        aria-label="Latitude"
+                                        value={Number.isFinite(item.lat) ? item.lat : ''}
+                                        onChange={(e) =>
+                                          setItem({ ...item, lat: parseFloat(e.target.value) })
+                                        }
+                                      />
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        className="admin-input journal-map-coord"
+                                        placeholder="Lng"
+                                        aria-label="Longitude"
+                                        value={Number.isFinite(item.lng) ? item.lng : ''}
+                                        onChange={(e) =>
+                                          setItem({ ...item, lng: parseFloat(e.target.value) })
+                                        }
+                                      />
+                                    </>
+                                  )}
+                                  {item.kind === 'photo' && (
+                                    <div
+                                      className="journal-map-photo"
+                                      onClick={() =>
+                                        setAssetPickerTarget({
+                                          title: 'Select a photo to place on the map',
+                                          onSelect: (id) => setItem({ kind: 'photo', assetId: id }),
+                                        })
+                                      }
+                                    >
+                                      {item.assetId ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img
+                                          src={`/api/admin/thumbnail/${item.assetId}`}
+                                          alt="Thumb"
+                                        />
+                                      ) : (
+                                        <span>+ Pick photo</span>
+                                      )}
+                                    </div>
+                                  )}
+                                  {item.kind === 'all-photos' && (
+                                    <span className="journal-map-all">
+                                      All geotagged photos of this entry, in order
+                                    </span>
+                                  )}
+                                  <div className="essay-block-actions">
+                                    <button
+                                      type="button"
+                                      className="admin-btn admin-btn-xs"
+                                      disabled={mIdx === 0}
+                                      aria-label="Move pin up"
+                                      onClick={() => move(-1)}
+                                    >
+                                      <IconChevronUp size={12} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="admin-btn admin-btn-xs"
+                                      disabled={mIdx === block.items.length - 1}
+                                      aria-label="Move pin down"
+                                      onClick={() => move(1)}
+                                    >
+                                      <IconChevronDown size={12} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="admin-btn admin-btn-xs admin-btn-danger"
+                                      aria-label="Remove pin"
+                                      onClick={() =>
+                                        handleUpdateBlock(idx, {
+                                          ...block,
+                                          items: block.items.filter((_, i) => i !== mIdx),
+                                        })
+                                      }
+                                    >
+                                      <IconX size={11} />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+
+                            {block.items.some(
+                              (it) => it.kind === 'point' && !isValidCoordinate(it.lat, it.lng),
+                            ) && (
+                              <p className="journal-block-warning">
+                                A point needs a latitude within ±90 and a longitude within ±180.
+                                Points without valid coordinates are not saved.
+                              </p>
+                            )}
+
+                            <div
+                              style={{
+                                display: 'flex',
+                                gap: '8px',
+                                flexWrap: 'wrap',
+                                alignItems: 'center',
+                              }}
+                            >
+                              <button
+                                type="button"
+                                className="admin-btn admin-btn-xs"
+                                onClick={() =>
+                                  handleUpdateBlock(idx, {
+                                    ...block,
+                                    items: [
+                                      ...block.items,
+                                      { kind: 'point', lat: Number.NaN, lng: Number.NaN },
+                                    ],
+                                  })
+                                }
+                              >
+                                <IconPlus size={12} /> Point
+                              </button>
+                              <button
+                                type="button"
+                                className="admin-btn admin-btn-xs"
+                                onClick={() =>
+                                  setAssetPickerTarget({
+                                    title: 'Select a photo to place on the map',
+                                    onSelect: (id) =>
+                                      handleUpdateBlock(idx, {
+                                        ...block,
+                                        items: [...block.items, { kind: 'photo', assetId: id }],
+                                      }),
+                                  })
+                                }
+                              >
+                                <IconCamera size={12} /> Photo pin
+                              </button>
+                              <button
+                                type="button"
+                                className="admin-btn admin-btn-xs"
+                                disabled={block.items.some((it) => it.kind === 'all-photos')}
+                                onClick={() =>
+                                  handleUpdateBlock(idx, {
+                                    ...block,
+                                    items: [...block.items, { kind: 'all-photos' }],
+                                  })
+                                }
+                              >
+                                <IconMap size={12} /> All geotagged photos
+                              </button>
+                              <label className="journal-map-line-toggle">
+                                <input
+                                  type="checkbox"
+                                  checked={block.line}
+                                  onChange={(e) =>
+                                    handleUpdateBlock(idx, { ...block, line: e.target.checked })
+                                  }
+                                />
+                                Connect pins with a line
+                              </label>
+                            </div>
+
+                            <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>
+                              Typed points show in the preview right away. Photo pins are placed on
+                              the live page from the photo&apos;s GPS, under the album&apos;s
+                              location precision.
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </SortableBlockCard>
+                  ))}
+                </div>
+              </SortableBlockList>
             </div>
           )}
         </div>
@@ -1173,7 +1771,7 @@ function JournalEditor({ slug, onBack }: JournalEditorProps) {
 
           <div className={`journal-preview-frame ${viewport}`}>
             <EssayView
-              essay={parsed}
+              essay={{ ...parsed, blocks: previewBlocks }}
               assets={previewAssets}
               title={parsed.frontmatter.title}
               subtitle={parsed.frontmatter.subtitle}
@@ -1352,6 +1950,19 @@ function JournalEditor({ slug, onBack }: JournalEditorProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Album Picker Modal */}
+      {albumPickerTarget && albumList !== null && (
+        <AlbumPicker
+          albums={albumList}
+          usedAlbumIds={new Set()}
+          onSelect={(albumId) => {
+            albumPickerTarget(albumId);
+            setAlbumPickerTarget(null);
+          }}
+          onClose={() => setAlbumPickerTarget(null)}
+        />
       )}
 
       {/* Asset Picker Modal */}

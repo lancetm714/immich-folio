@@ -1,7 +1,17 @@
 'use client';
 
 import type { JournalBlock } from '@/lib/journal';
-import { IconFileText, IconSparkles, IconQuote, IconCamera, IconArrowLeftRight } from './Icons';
+import {
+  IconFileText,
+  IconSparkles,
+  IconQuote,
+  IconCamera,
+  IconArrowLeftRight,
+  IconGrid,
+  IconColumns,
+  IconMap,
+  IconFolder,
+} from './Icons';
 
 type BlockType = JournalBlock['type'];
 
@@ -19,6 +29,10 @@ const BLOCK_META: Record<BlockType, { label: string; Icon: typeof IconFileText }
   quote: { label: 'Quote', Icon: IconQuote },
   photo: { label: 'Photo', Icon: IconCamera },
   'photo-pair': { label: 'Photo Pair', Icon: IconArrowLeftRight },
+  'photo-grid': { label: 'Photo Grid', Icon: IconGrid },
+  facts: { label: 'Facts', Icon: IconColumns },
+  map: { label: 'Map', Icon: IconMap },
+  album: { label: 'Album', Icon: IconFolder },
 };
 
 interface BlockBadgeProps {

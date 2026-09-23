@@ -19,12 +19,103 @@ export type JournalBlock =
   | { type: 'paragraph'; html: string }
   | { type: 'quote'; text: string; author?: string }
   | { type: 'photo'; assetId: string; caption?: string; layout: 'fullbleed' | 'wide' | 'contained' }
-  | { type: 'photo-pair'; assetIds: [string, string]; caption?: string };
+  | { type: 'photo-pair'; assetIds: [string, string]; caption?: string }
+  | { type: 'photo-grid'; assetIds: string[]; caption?: string }
+  | { type: 'facts'; items: Array<{ label: string; value: string }> }
+  | { type: 'map'; caption?: string; line: boolean; items: MapItem[]; pins?: MapPin[] }
+  | {
+      /**
+       * "x photos from an album". Expanded on the server into photo blocks
+       * (lib/journalAlbum.ts) before the page renders, so the client never
+       * sees this type; the studio expands it through the admin assets route.
+       */
+      type: 'album';
+      albumId: string;
+      count?: number;
+      skip?: number;
+      layout: AlbumBlockLayout;
+      caption?: string;
+    };
+
+export type AlbumBlockLayout = 'grid' | 'pairs' | 'wide';
+
+/**
+ * What an author puts on a journal map, in the order the line is drawn.
+ * A typed point is published as typed. A photo item is placed by its EXIF
+ * position under the album's `location:` precision; `all-photos` expands to
+ * every geotagged photo of the entry not already listed.
+ */
+export type MapItem =
+  | { kind: 'point'; label?: string; lat: number; lng: number }
+  | { kind: 'photo'; assetId: string }
+  | { kind: 'all-photos' };
+
+export function isValidCoordinate(lat: number, lng: number): boolean {
+  return (
+    Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180
+  );
+}
+
+/**
+ * A position on a journal map. Never authored and never serialized: the
+ * server derives pins from the entry's own geotagged photos at render time
+ * (lib/journalMap.ts), already quantised to the album's `location:` setting.
+ */
+export interface MapPin {
+  lat: number;
+  lng: number;
+  label?: string;
+}
 
 export interface ParsedJournal {
   frontmatter: JournalFrontmatter;
   blocks: JournalBlock[];
   referencedAssetIds: string[];
+}
+
+/**
+ * Every asset id a block refers to, in block order, without duplicates.
+ * An empty id is an unfilled placeholder (the block editor's "+ Pick" tile),
+ * not a reference — it is skipped so nothing probes or renders it.
+ */
+export function collectAssetIds(blocks: readonly JournalBlock[]): string[] {
+  const ids = new Set<string>();
+  for (const block of blocks) {
+    if (block.type === 'photo') {
+      if (block.assetId) ids.add(block.assetId);
+    } else if (block.type === 'photo-pair' || block.type === 'photo-grid') {
+      for (const id of block.assetIds) if (id) ids.add(id);
+    } else if (block.type === 'map') {
+      for (const item of block.items)
+        if (item.kind === 'photo' && item.assetId) ids.add(item.assetId);
+    }
+  }
+  return Array.from(ids);
+}
+
+/**
+ * The same block with every asset id passed through `fn` — the one place that
+ * knows which block types carry ids, so the page that swaps raw UUIDs for
+ * tokens does not grow a branch per type.
+ */
+export function mapBlockAssetIds(block: JournalBlock, fn: (id: string) => string): JournalBlock {
+  switch (block.type) {
+    case 'photo':
+      return { ...block, assetId: fn(block.assetId) };
+    case 'photo-pair':
+      return { ...block, assetIds: [fn(block.assetIds[0]), fn(block.assetIds[1])] };
+    case 'photo-grid':
+      return { ...block, assetIds: block.assetIds.map(fn) };
+    case 'map':
+      return {
+        ...block,
+        items: block.items.map((item) =>
+          item.kind === 'photo' ? { ...item, assetId: fn(item.assetId) } : item,
+        ),
+      };
+    default:
+      return block;
+  }
 }
 
 export interface JournalEntrySummary {
@@ -289,11 +380,6 @@ export function parseFrontmatter(content: string): {
 export function parseJournalMarkdown(rawContent: string): ParsedJournal {
   const { frontmatter, body } = parseFrontmatter(rawContent);
   const blocks: JournalBlock[] = [];
-  const referencedAssetIds = new Set<string>();
-
-  if (frontmatter.coverAssetId) {
-    referencedAssetIds.add(frontmatter.coverAssetId);
-  }
 
   // Split body into paragraph chunks separated by blank lines
   const chunks = body
@@ -302,6 +388,106 @@ export function parseJournalMarkdown(rawContent: string): ParsedJournal {
     .filter(Boolean);
 
   for (const chunk of chunks) {
+    // 0a. Map: `::map Caption`, then one line per pin in drawing order —
+    //     `Label: lat, lng` or `lat, lng` for a typed point, `photo: <id>` for
+    //     a photo placed by its GPS, `photos: all` for every geotagged photo
+    //     of the entry, `line: off` to drop the connecting line. Pins are
+    //     never in the file — see MapPin. Malformed lines are ignored.
+    const [mapFirst, ...mapRest] = chunk.split('\n');
+    const mapMatch = mapFirst.match(/^::map(?:[ \t]+(\S.*))?[ \t]*$/);
+    if (mapMatch) {
+      const caption = mapMatch[1]?.trim();
+      const items: MapItem[] = [];
+      let line = true;
+      const coords = (s: string) => {
+        const m = s.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+        if (!m) return null;
+        const lat = Number(m[1]);
+        const lng = Number(m[2]);
+        return isValidCoordinate(lat, lng) ? { lat, lng } : null;
+      };
+      for (const raw of mapRest) {
+        const text = raw.trim();
+        if (!text) continue;
+        const colon = text.indexOf(':');
+        const key = colon === -1 ? '' : text.slice(0, colon).trim();
+        const value = colon === -1 ? text : text.slice(colon + 1).trim();
+        const lowerKey = key.toLowerCase();
+        if (lowerKey === 'line') {
+          line = !['off', 'false', 'no', '0'].includes(value.toLowerCase());
+        } else if (lowerKey === 'photos') {
+          if (value.toLowerCase() === 'all') items.push({ kind: 'all-photos' });
+        } else if (lowerKey === 'photo') {
+          for (const id of value.split(',')) {
+            const assetId = id.trim();
+            if (assetId) items.push({ kind: 'photo', assetId });
+          }
+        } else {
+          const pos = coords(value);
+          if (pos)
+            items.push(key ? { kind: 'point', label: key, ...pos } : { kind: 'point', ...pos });
+        }
+      }
+      blocks.push({
+        type: 'map',
+        caption: caption ? renderInlineMarkdown(caption) : undefined,
+        line,
+        items,
+      });
+      continue;
+    }
+
+    // 0b. Facts: a `::facts` line, then `Label: Value` lines in the same chunk.
+    //    `::` because `![facts]` would read as a legacy photo reference and `#`
+    //    and `>` are taken; no paragraph starts that way. The first colon
+    //    splits, so `Time: 08:30` keeps its value. Lines without one, or with
+    //    an empty side, are ignored.
+    if (chunk.startsWith('::facts')) {
+      const items = chunk
+        .split('\n')
+        .slice(1)
+        .flatMap((line) => {
+          const colon = line.indexOf(':');
+          if (colon === -1) return [];
+          const label = line.slice(0, colon).trim();
+          const value = line.slice(colon + 1).trim();
+          return label && value ? [{ label, value: renderInlineMarkdown(value) }] : [];
+        });
+      blocks.push({ type: 'facts', items });
+      continue;
+    }
+
+    // 0c. Album: `::album <id>` with `count:`, `skip:`, `layout:` and
+    //     `caption:` lines. An empty id is the studio's unfilled placeholder.
+    const [albumFirst, ...albumRest] = chunk.split('\n');
+    const albumMatch = albumFirst.match(/^::album(?:[ \t]+(\S+))?[ \t]*$/);
+    if (albumMatch) {
+      let count: number | undefined;
+      let skip: number | undefined;
+      let layout: AlbumBlockLayout = 'grid';
+      let caption: string | undefined;
+      for (const raw of albumRest) {
+        const colon = raw.indexOf(':');
+        if (colon === -1) continue;
+        const key = raw.slice(0, colon).trim().toLowerCase();
+        const value = raw.slice(colon + 1).trim();
+        if (key === 'count' && /^\d+$/.test(value)) count = Number(value);
+        else if (key === 'skip' && /^\d+$/.test(value)) skip = Number(value);
+        else if (key === 'layout' && (value === 'grid' || value === 'pairs' || value === 'wide'))
+          layout = value;
+        else if (key === 'caption' && value) caption = renderInlineMarkdown(value);
+      }
+      blocks.push({
+        type: 'album',
+        albumId: albumMatch[1] ?? '',
+        ...(count !== undefined ? { count } : {}),
+        ...(skip ? { skip } : {}),
+        layout,
+        ...(caption ? { caption } : {}),
+      });
+      continue;
+    }
+
     // 1. Headings (# H1, ## H2, ### H3)
     // `[ \t]+` rather than `\s+`: next to `(.+)` the two overlap, and the
     // engine has to try every split of the whitespace run before failing.
@@ -333,7 +519,8 @@ export function parseJournalMarkdown(rawContent: string): ParsedJournal {
       continue;
     }
 
-    // 3. Image syntax: ![assetId:layout](Caption) or ![assetId1, assetId2](Caption)
+    // 3. Image syntax: ![assetId:layout](Caption), ![id1, id2](Caption) for a
+    //    pair, ![id1, id2, id3, …](Caption) for a grid
     //
     // The bracket group allows zero characters (`*`, not `+`) so a template's
     // unfilled placeholder — `assetId: ''`, serialized as `![](Caption)` or
@@ -344,18 +531,18 @@ export function parseJournalMarkdown(rawContent: string): ParsedJournal {
       const rawTarget = imgMatch[1].trim();
       const caption = imgMatch[2].trim() ? renderInlineMarkdown(imgMatch[2].trim()) : undefined;
 
-      // Side-by-side pair: ![asset1, asset2](Caption)
+      // Two ids are a side-by-side pair, three or more a grid. The pair used
+      // to take the first two of any count and drop the rest on the next save.
       if (rawTarget.includes(',')) {
         const parts = rawTarget.split(',').map((s) => s.trim());
-        if (parts.length >= 2) {
-          const id1 = parts[0];
-          const id2 = parts[1];
-          // Same placeholder rule as single photos below: '' is unfilled.
-          if (id1) referencedAssetIds.add(id1);
-          if (id2) referencedAssetIds.add(id2);
+        if (parts.length >= 3) {
+          blocks.push({ type: 'photo-grid', assetIds: parts, caption });
+          continue;
+        }
+        if (parts.length === 2) {
           blocks.push({
             type: 'photo-pair',
-            assetIds: [id1, id2],
+            assetIds: [parts[0], parts[1]],
             caption,
           });
           continue;
@@ -374,11 +561,6 @@ export function parseJournalMarkdown(rawContent: string): ParsedJournal {
         else if (normLayout === 'wide') layout = 'wide';
       }
 
-      // An empty assetId is a placeholder (see the regex comment above), not a
-      // reference to resolve — adding '' here would make the studio probe
-      // `/api/admin/thumbnail/` and the published page look up a nonexistent
-      // asset.
-      if (assetId) referencedAssetIds.add(assetId);
       blocks.push({
         type: 'photo',
         assetId,
@@ -395,11 +577,15 @@ export function parseJournalMarkdown(rawContent: string): ParsedJournal {
     });
   }
 
-  return {
-    frontmatter,
-    blocks,
-    referencedAssetIds: Array.from(referencedAssetIds),
-  };
+  // The cover comes first, as before; collectAssetIds() skips '' placeholders.
+  const referencedAssetIds = Array.from(
+    new Set([
+      ...(frontmatter.coverAssetId ? [frontmatter.coverAssetId] : []),
+      ...collectAssetIds(blocks),
+    ]),
+  );
+
+  return { frontmatter, blocks, referencedAssetIds };
 }
 
 /** Converts a ParsedJournal structure back into clean Markdown syntax */
@@ -461,6 +647,52 @@ export function serializeJournalMarkdown(journal: ParsedJournal): string {
         lines.push(`![${block.assetIds[0]}, ${block.assetIds[1]}](${caption})`);
         break;
       }
+      case 'photo-grid': {
+        const caption = block.caption
+          ? inlineHtmlToMarkdown(block.caption.replace(/[\r\n]+/g, ' '))
+          : '';
+        lines.push(`![${block.assetIds.join(', ')}](${caption})`);
+        break;
+      }
+      case 'map': {
+        const caption = block.caption
+          ? inlineHtmlToMarkdown(block.caption.replace(/[\r\n]+/g, ' ')).trim()
+          : '';
+        lines.push(caption ? `::map ${caption}` : '::map');
+        for (const item of block.items) {
+          if (item.kind === 'all-photos') lines.push('photos: all');
+          else if (item.kind === 'photo') {
+            if (item.assetId) lines.push(`photo: ${item.assetId}`);
+          } else if (isValidCoordinate(item.lat, item.lng)) {
+            const label = item.label?.replace(/[\r\n]+/g, ' ').trim();
+            lines.push(label ? `${label}: ${item.lat}, ${item.lng}` : `${item.lat}, ${item.lng}`);
+          }
+        }
+        if (!block.line) lines.push('line: off');
+        break;
+      }
+      case 'album': {
+        lines.push(block.albumId ? `::album ${block.albumId}` : '::album');
+        if (block.count !== undefined) lines.push(`count: ${block.count}`);
+        if (block.skip) lines.push(`skip: ${block.skip}`);
+        if (block.layout !== 'grid') lines.push(`layout: ${block.layout}`);
+        if (block.caption) {
+          const caption = inlineHtmlToMarkdown(block.caption.replace(/[\r\n]+/g, ' ')).trim();
+          if (caption) lines.push(`caption: ${caption}`);
+        }
+        break;
+      }
+      case 'facts': {
+        lines.push('::facts');
+        for (const item of block.items) {
+          const label = item.label.trim();
+          const value = inlineHtmlToMarkdown(item.value)
+            .replace(/[\r\n]+/g, ' ')
+            .trim();
+          if (label && value) lines.push(`${label}: ${value}`);
+        }
+        break;
+      }
     }
     lines.push('');
   }
@@ -470,7 +702,11 @@ export function serializeJournalMarkdown(journal: ParsedJournal): string {
 
 /** Calculate approximate word count and reading time */
 export function calculateReadingTime(text: string): { words: number; minutes: number } {
-  const plainText = text.replace(/<[^>]+>/g, ' ').replace(/!\[.*?\]\(.*?\)/g, ' ');
+  const plainText = text
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/!\[.*?\]\(.*?\)/g, ' ')
+    // Directive lines (`::facts`, `::map …`) are structure, not reading.
+    .replace(/^::\w+.*$/gm, ' ');
   const words = plainText.trim().split(/\s+/).filter(Boolean).length;
   const minutes = Math.max(1, Math.round(words / 200));
   return { words, minutes };
