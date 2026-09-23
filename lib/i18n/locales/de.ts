@@ -43,6 +43,7 @@ export const de: Dictionary = {
     entryNavAria: 'Journal-Navigation',
     loadingGallery: 'Galerie wird geladen',
     loadingPhotos: 'Fotos werden geladen',
+    downloadAlbum: 'Album herunterladen',
   },
 
   home: {
@@ -179,6 +180,7 @@ export const de: Dictionary = {
     copyList: 'Textliste kopieren (#1, #2...)',
     listCopied: 'Liste kopiert!',
     sendEmail: '✉️ E-Mail an den Fotografen',
+    downloadSelected: 'Auswahl herunterladen (.zip)',
     clearSelection: 'Auswahl löschen',
     confirmClear: 'Die gesamte Auswahl löschen?',
     listEmpty: (albumName: string) => `${albumName}: Keine Fotos ausgewählt.`,
