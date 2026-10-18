@@ -141,6 +141,15 @@ describe('lightbox tokens (T-1, T-2)', () => {
     expect(tsx).not.toMatch(/#ff4d4f/i);
     expect(tsx).not.toMatch(/color: isFav/);
   });
+
+  it('clears 4.5:1 on controls against pure white backgrounds in zoom mode (#842)', () => {
+    const white = parse('#ffffff');
+    const controlBg = over(parse(token(ROOT, 'lightbox-control-bg')!), white);
+    for (const name of ['text', 'text-secondary']) {
+      const fg = over(lb(name), controlBg);
+      expect(ratio(fg, controlBg), name).toBeGreaterThanOrEqual(4.5);
+    }
+  });
 });
 
 describe('text on the accent (T-5, T-6)', () => {

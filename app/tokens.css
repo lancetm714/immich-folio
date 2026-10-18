@@ -71,15 +71,16 @@
      button, arrows and counter came out at 1.1–2:1. Lightbox.module.css
      points the text tokens at these inside the overlay in light mode; dark
      mode keeps each preset's tinted greys. */
-  --lightbox-text: rgba(255, 255, 255, 0.92);
-  --lightbox-text-secondary: rgba(255, 255, 255, 0.72);
-  --lightbox-text-muted: rgba(255, 255, 255, 0.62);
-  --lightbox-border: rgba(255, 255, 255, 0.12);
-  /* Round controls float over the photo on narrow screens; a dark fill keeps
-     them visible on a white sky, where the old white-alpha disc vanished. */
-  --lightbox-control-bg: rgba(0, 0, 0, 0.35);
-  --lightbox-control-bg-hover: rgba(0, 0, 0, 0.55);
-  --lightbox-control-border: rgba(255, 255, 255, 0.18);
+  --lightbox-text: rgba(255, 255, 255, 0.95);
+  --lightbox-text-secondary: rgba(255, 255, 255, 0.85);
+  --lightbox-text-muted: rgba(255, 255, 255, 0.7);
+  --lightbox-border: rgba(255, 255, 255, 0.18);
+  /* Controls float over the photo on narrow screens and in zoom mode;
+     a darker translucent fill keeps them visible and legible on white/bright
+     backgrounds (clears 4.5:1 on #ffffff, #842). */
+  --lightbox-control-bg: rgba(0, 0, 0, 0.65);
+  --lightbox-control-bg-hover: rgba(0, 0, 0, 0.82);
+  --lightbox-control-border: rgba(255, 255, 255, 0.24);
   /* A saved favourite. Not the accent: minimal's is white and a custom one
      may be dark navy, neither of which marks anything on the overlay. */
   --lightbox-fav: #ff6b6b;
