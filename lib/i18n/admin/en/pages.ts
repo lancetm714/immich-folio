@@ -15,8 +15,10 @@ export const pages = {
   },
 
   builder: {
-    sessionExpired: 'Your session has expired. Sign in again to continue.',
-    serverAnswered: (status: number) => `The server answered ${status}.`,
+    albumListFailed: (error: string) =>
+      `Immich albums did not load, so the album picker is empty. ${error}`,
+    pageListFailed: (error: string) =>
+      `The content pages did not load; their menu entries stay as they are. ${error}`,
     loadFailed: 'The page structure could not be loaded.',
     loadFailedNote:
       'Nothing has been changed. Saving stays disabled until it loads, so an empty builder cannot overwrite your gallery.',
@@ -224,6 +226,8 @@ export const pages = {
   /** The subpage drawer's Live Preview tab. */
   preview: {
     note: 'Rendered with the site’s saved theme preset at desktop width. Unsaved edits in this drawer show up here; theme changes show up once saved in Settings.',
+    settingsFailed: (error: string) =>
+      `The preview uses the default grid and English until the site settings load. ${error}`,
   },
 
   /** Rows and tiles of the structure list. */
@@ -268,8 +272,6 @@ export const pages = {
 
   pagePanel: {
     noFile: 'There is no file for this page in content/pages/.',
-    serverAnswered: (status: number) => `The server answered ${status}.`,
-    couldNotLoad: 'Could not load.',
     exists: (slug: string) => `A page "${slug}" already exists.`,
     moveTitle: (slug: string) => `Move this page to /${slug}?`,
     linksBreak: (slug: string) =>

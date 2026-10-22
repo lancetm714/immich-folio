@@ -17,8 +17,10 @@ export const pages: AdminDictionary['pages'] = {
   },
 
   builder: {
-    sessionExpired: 'Je sessie is verlopen. Meld je opnieuw aan om verder te gaan.',
-    serverAnswered: (status: number) => `De server antwoordde met ${status}.`,
+    albumListFailed: (error: string) =>
+      `De Immich-albums zijn niet geladen, daarom is de albumkiezer leeg. ${error}`,
+    pageListFailed: (error: string) =>
+      `De inhoudspagina’s zijn niet geladen; hun menu-items blijven zoals ze zijn. ${error}`,
     loadFailed: 'De paginastructuur kon niet worden geladen.',
     loadFailedNote:
       'Er is niets gewijzigd. Opslaan blijft uitgeschakeld tot die geladen is, zodat een lege editor je galerij niet kan overschrijven.',
@@ -234,6 +236,8 @@ export const pages: AdminDictionary['pages'] = {
   /** The subpage drawer's Live Preview tab. */
   preview: {
     note: 'Weergegeven met de opgeslagen themavoorinstelling van de site, op desktopbreedte. Niet-opgeslagen wijzigingen in dit paneel zie je hier; themawijzigingen pas zodra ze in Instellingen zijn opgeslagen.',
+    settingsFailed: (error: string) =>
+      `De voorvertoning gebruikt het standaardraster en Engels tot de site-instellingen geladen zijn. ${error}`,
   },
 
   /** Rows and tiles of the structure list. */
@@ -278,8 +282,6 @@ export const pages: AdminDictionary['pages'] = {
 
   pagePanel: {
     noFile: 'Er is geen bestand voor deze pagina in content/pages/.',
-    serverAnswered: (status: number) => `De server antwoordde met ${status}.`,
-    couldNotLoad: 'Kon niet worden geladen.',
     exists: (slug: string) => `Er bestaat al een pagina “${slug}”.`,
     moveTitle: (slug: string) => `Deze pagina verplaatsen naar /${slug}?`,
     linksBreak: (slug: string) =>

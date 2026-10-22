@@ -29,10 +29,6 @@ export const pickers = {
       favorites: 'Favorites',
       allPhotos: 'All Photos',
     },
-    albumsLoadFailed: (status: number) => `Could not load albums (HTTP ${status}).`,
-    albumsUnreachable: 'Failed to load albums.',
-    photosLoadFailed: (status: number) => `Could not load photos (HTTP ${status}).`,
-    photosUnreachable: 'Failed to load photos.',
     filterAlbumPlaceholder: 'Filter this album by filename…',
     searchPlaceholder: 'Search filename, description, or a date (2024-05)…',
     searchLabel: 'Search photos',
@@ -67,7 +63,6 @@ export const pickers = {
   /** The editor for `sort: manual`: pinned photos first, the rest in Immich order. */
   orderEditor: {
     title: (albumName: string) => `Photo order — ${albumName}`,
-    loadFailed: 'Could not load the album’s photos from Immich.',
     /** Pinned photos that were removed from the album in Immich. */
     dropped: (count: number) =>
       `${count} pinned ${count === 1 ? 'photo is' : 'photos are'} no longer in this album. ${

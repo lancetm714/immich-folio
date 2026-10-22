@@ -20,8 +20,10 @@ export const pages: AdminDictionary['pages'] = {
   },
 
   builder: {
-    sessionExpired: 'Votre session a expiré. Reconnectez-vous pour continuer.',
-    serverAnswered: (status: number) => `Le serveur a répondu ${status}.`,
+    albumListFailed: (error: string) =>
+      `Les albums Immich n’ont pas été chargés : le sélecteur d’albums est vide. ${error}`,
+    pageListFailed: (error: string) =>
+      `Les pages de contenu n’ont pas été chargées ; leurs entrées de menu restent telles quelles. ${error}`,
     loadFailed: 'La structure des pages n’a pas pu être chargée.',
     loadFailedNote:
       'Rien n’a été modifié. L’enregistrement reste désactivé tant qu’elle n’est pas chargée, pour qu’un éditeur vide ne puisse pas écraser votre galerie.',
@@ -243,6 +245,8 @@ export const pages: AdminDictionary['pages'] = {
   /** The subpage drawer's Live Preview tab. */
   preview: {
     note: 'Rendu avec le préréglage de thème enregistré du site, en largeur ordinateur. Les modifications non enregistrées de ce panneau apparaissent ici ; celles du thème, une fois enregistrées dans Paramètres.',
+    settingsFailed: (error: string) =>
+      `L’aperçu utilise la grille par défaut et l’anglais tant que les paramètres du site ne sont pas chargés. ${error}`,
   },
 
   /** Rows and tiles of the structure list. */
@@ -288,8 +292,6 @@ export const pages: AdminDictionary['pages'] = {
 
   pagePanel: {
     noFile: 'Il n’y a pas de fichier pour cette page dans content/pages/.',
-    serverAnswered: (status: number) => `Le serveur a répondu ${status}.`,
-    couldNotLoad: 'Chargement impossible.',
     exists: (slug: string) => `Une page « ${slug} » existe déjà.`,
     moveTitle: (slug: string) => `Déplacer cette page vers /${slug} ?`,
     linksBreak: (slug: string) =>

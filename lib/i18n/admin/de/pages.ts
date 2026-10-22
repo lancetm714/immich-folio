@@ -17,8 +17,10 @@ export const pages: AdminDictionary['pages'] = {
   },
 
   builder: {
-    sessionExpired: 'Deine Sitzung ist abgelaufen. Melde dich erneut an, um fortzufahren.',
-    serverAnswered: (status: number) => `Der Server antwortete mit ${status}.`,
+    albumListFailed: (error: string) =>
+      `Die Immich-Alben wurden nicht geladen, deshalb ist die Albumauswahl leer. ${error}`,
+    pageListFailed: (error: string) =>
+      `Die Inhaltsseiten wurden nicht geladen; ihre Menüeinträge bleiben, wie sie sind. ${error}`,
     loadFailed: 'Die Seitenstruktur konnte nicht geladen werden.',
     loadFailedNote:
       'Es wurde nichts geändert. Speichern bleibt gesperrt, bis sie geladen ist, damit ein leerer Seiteneditor deine Galerie nicht überschreibt.',
@@ -234,6 +236,8 @@ export const pages: AdminDictionary['pages'] = {
   /** The subpage drawer's Live Preview tab. */
   preview: {
     note: 'Dargestellt mit der gespeicherten Design-Vorlage der Website in Desktop-Breite. Ungespeicherte Änderungen in diesem Bereich erscheinen hier; Designänderungen erst, wenn sie in den Einstellungen gespeichert sind.',
+    settingsFailed: (error: string) =>
+      `Die Vorschau nutzt das Standardraster und Englisch, bis die Website-Einstellungen geladen sind. ${error}`,
   },
 
   /** Rows and tiles of the structure list. */
@@ -278,8 +282,6 @@ export const pages: AdminDictionary['pages'] = {
 
   pagePanel: {
     noFile: 'Für diese Seite gibt es keine Datei in content/pages/.',
-    serverAnswered: (status: number) => `Der Server antwortete mit ${status}.`,
-    couldNotLoad: 'Konnte nicht geladen werden.',
     exists: (slug: string) => `Eine Seite „${slug}“ gibt es bereits.`,
     moveTitle: (slug: string) => `Diese Seite nach /${slug} verschieben?`,
     linksBreak: (slug: string) =>

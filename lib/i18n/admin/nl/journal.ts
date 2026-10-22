@@ -108,8 +108,6 @@ export const journal: AdminDictionary['journal'] = {
 
   /** The editor of one entry, also used for content pages. */
   editor: {
-    sessionExpired: 'Je sessie is verlopen. Meld je opnieuw aan om verder te gaan.',
-    serverAnswered: (status: number) => `De server antwoordde met ${status}.`,
     loadFailedFallback: 'Het verhaal kon niet worden geladen.',
     conflictKept: 'Niet opgeslagen — het is elders gewijzigd. Je wijzigingen staan er nog.',
     saveFailed: 'Opslaan mislukt',
@@ -121,6 +119,7 @@ export const journal: AdminDictionary['journal'] = {
     openingPage: 'Pagina-editor openen…',
     loadFailedEntry: 'Dit verhaal kon niet worden geladen.',
     loadFailedPage: 'Deze pagina kon niet worden geladen.',
+    albumListFailed: (error: string) => `Albumlijst: ${error}`,
     loadFailedNote:
       'Er is niets gewijzigd. Opslaan blijft uitgeschakeld tot het geladen is, zodat een lege editor het niet kan overschrijven.',
     backToEntries: 'Terug naar de verhalen',

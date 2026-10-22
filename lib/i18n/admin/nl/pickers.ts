@@ -31,10 +31,6 @@ export const pickers: AdminDictionary['pickers'] = {
       favorites: 'Favorieten',
       allPhotos: 'Alle foto’s',
     },
-    albumsLoadFailed: (status: number) => `Albums konden niet worden geladen (HTTP ${status}).`,
-    albumsUnreachable: 'Laden van de albums mislukt.',
-    photosLoadFailed: (status: number) => `Foto’s konden niet worden geladen (HTTP ${status}).`,
-    photosUnreachable: 'Laden van de foto’s mislukt.',
     filterAlbumPlaceholder: 'Dit album filteren op bestandsnaam…',
     searchPlaceholder: 'Zoek op bestandsnaam, beschrijving of een datum (2024-05)…',
     searchLabel: 'Foto’s zoeken',
@@ -69,7 +65,6 @@ export const pickers: AdminDictionary['pickers'] = {
   /** The editor for `sort: manual`: pinned photos first, the rest in Immich order. */
   orderEditor: {
     title: (albumName: string) => `Fotovolgorde — ${albumName}`,
-    loadFailed: 'De foto’s van het album konden niet uit Immich worden geladen.',
     /** Pinned photos that were removed from the album in Immich. */
     dropped: (count: number) =>
       `${count} ${count === 1 ? 'vastgezette foto staat' : 'vastgezette foto’s staan'} niet meer in dit album. ${

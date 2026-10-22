@@ -17,8 +17,10 @@ export const pages: AdminDictionary['pages'] = {
   },
 
   builder: {
-    sessionExpired: 'Tu sesión ha caducado. Vuelve a iniciar sesión para continuar.',
-    serverAnswered: (status: number) => `El servidor ha respondido ${status}.`,
+    albumListFailed: (error: string) =>
+      `Los álbumes de Immich no se cargaron, por eso el selector de álbumes está vacío. ${error}`,
+    pageListFailed: (error: string) =>
+      `Las páginas de contenido no se cargaron; sus entradas del menú se quedan como están. ${error}`,
     loadFailed: 'No se ha podido cargar la estructura de páginas.',
     loadFailedNote:
       'No se ha cambiado nada. Guardar seguirá desactivado hasta que se cargue, para que un editor vacío no pueda sobrescribir tu galería.',
@@ -233,6 +235,8 @@ export const pages: AdminDictionary['pages'] = {
   /** The subpage drawer's Live Preview tab. */
   preview: {
     note: 'Se muestra con el preajuste de tema guardado del sitio, a ancho de escritorio. Los cambios sin guardar de este panel aparecen aquí; los cambios de tema, una vez guardados en Ajustes.',
+    settingsFailed: (error: string) =>
+      `La vista previa usa la cuadrícula predeterminada y el inglés hasta que se carguen los ajustes del sitio. ${error}`,
   },
 
   /** Rows and tiles of the structure list. */
@@ -277,8 +281,6 @@ export const pages: AdminDictionary['pages'] = {
 
   pagePanel: {
     noFile: 'No hay ningún archivo para esta página en content/pages/.',
-    serverAnswered: (status: number) => `El servidor ha respondido ${status}.`,
-    couldNotLoad: 'No se ha podido cargar.',
     exists: (slug: string) => `Ya existe una página «${slug}».`,
     moveTitle: (slug: string) => `¿Mover esta página a /${slug}?`,
     linksBreak: (slug: string) =>

@@ -108,8 +108,6 @@ export const journal: AdminDictionary['journal'] = {
 
   /** The editor of one entry, also used for content pages. */
   editor: {
-    sessionExpired: 'Deine Sitzung ist abgelaufen. Melde dich erneut an, um fortzufahren.',
-    serverAnswered: (status: number) => `Der Server antwortete mit ${status}.`,
     loadFailedFallback: 'Der Eintrag konnte nicht geladen werden.',
     conflictKept: 'Nicht gespeichert — er wurde anderswo geändert. Deine Änderungen sind noch da.',
     saveFailed: 'Speichern fehlgeschlagen',
@@ -121,6 +119,7 @@ export const journal: AdminDictionary['journal'] = {
     openingPage: 'Seiteneditor wird geöffnet...',
     loadFailedEntry: 'Dieser Eintrag konnte nicht geladen werden.',
     loadFailedPage: 'Diese Seite konnte nicht geladen werden.',
+    albumListFailed: (error: string) => `Albumliste: ${error}`,
     loadFailedNote:
       'Es wurde nichts geändert. Speichern bleibt gesperrt, bis geladen ist, damit ein leerer Editor nichts überschreibt.',
     backToEntries: 'Zurück zu den Einträgen',

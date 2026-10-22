@@ -31,10 +31,6 @@ export const pickers: AdminDictionary['pickers'] = {
       favorites: 'Favoritas',
       allPhotos: 'Todas las fotos',
     },
-    albumsLoadFailed: (status: number) => `No se han podido cargar los álbumes (HTTP ${status}).`,
-    albumsUnreachable: 'No se han podido cargar los álbumes.',
-    photosLoadFailed: (status: number) => `No se han podido cargar las fotos (HTTP ${status}).`,
-    photosUnreachable: 'No se han podido cargar las fotos.',
     filterAlbumPlaceholder: 'Filtrar este álbum por nombre de archivo…',
     searchPlaceholder: 'Buscar por nombre de archivo, descripción o fecha (2024-05)…',
     searchLabel: 'Buscar fotos',
@@ -69,7 +65,6 @@ export const pickers: AdminDictionary['pickers'] = {
   /** The editor for `sort: manual`: pinned photos first, the rest in Immich order. */
   orderEditor: {
     title: (albumName: string) => `Orden de las fotos: ${albumName}`,
-    loadFailed: 'No se han podido cargar las fotos del álbum desde Immich.',
     /** Pinned photos that were removed from the album in Immich. */
     dropped: (count: number) =>
       count === 1

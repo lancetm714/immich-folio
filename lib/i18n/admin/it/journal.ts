@@ -109,8 +109,6 @@ export const journal: AdminDictionary['journal'] = {
 
   /** The editor of one entry, also used for content pages. */
   editor: {
-    sessionExpired: 'La tua sessione è scaduta. Accedi di nuovo per continuare.',
-    serverAnswered: (status: number) => `Il server ha risposto ${status}.`,
     loadFailedFallback: 'Non è stato possibile caricare l’articolo.',
     conflictKept: 'Non salvato: è stato modificato altrove. Le tue modifiche sono ancora qui.',
     saveFailed: 'Salvataggio non riuscito',
@@ -120,6 +118,7 @@ export const journal: AdminDictionary['journal'] = {
     openingPage: 'Apertura dell’editor della pagina...',
     loadFailedEntry: 'Non è stato possibile caricare questo articolo.',
     loadFailedPage: 'Non è stato possibile caricare questa pagina.',
+    albumListFailed: (error: string) => `Elenco degli album: ${error}`,
     loadFailedNote:
       'Non è stato modificato nulla. Il salvataggio resta disattivato finché non viene caricato, così un editor vuoto non può sovrascriverlo.',
     backToEntries: 'Torna agli articoli',
