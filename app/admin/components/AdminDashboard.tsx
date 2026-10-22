@@ -129,7 +129,13 @@ export default function AdminDashboard({ onLogout, children }: Props) {
   // menu button (#732) — spread out above the content, it took most of an
   // iPhone screen before anything could be edited.
   const [menuOpen, setMenuOpen] = useState(false);
-  useEffect(() => setMenuOpen(false), [pathname]);
+  // Navigating closes the menu. Adjusted while rendering, so the new page is
+  // never drawn under an open menu for a frame.
+  const [menuPath, setMenuPath] = useState(pathname);
+  if (menuPath !== pathname) {
+    setMenuPath(pathname);
+    setMenuOpen(false);
+  }
   const [saving, setSaving] = useState(false);
 
   // Diagnostics & Backup state
@@ -220,8 +226,10 @@ export default function AdminDashboard({ onLogout, children }: Props) {
   }, [dict.shell]);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- loads started on mount; a reload and the status badge call them again, so they stay functions (#821) */
     fetchStatus();
     fetchDoctor();
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [fetchStatus, fetchDoctor]);
 
   // Re-counted on every navigation: reading a message in the inbox and moving

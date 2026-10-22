@@ -74,6 +74,7 @@ export default function PrivacyEditor() {
   }, [loadDraft, dict.shell]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a load started on mount; a restored backup calls it again, so it stays a function (#821)
     void load();
   }, [load]);
 

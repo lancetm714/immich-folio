@@ -160,6 +160,7 @@ export default function AssetPicker({
   );
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a new source starts an empty list and loads it; paging appends to it, so it stays a function (#821)
     setAssets([]);
     setPage(1);
     setHasMore(false);

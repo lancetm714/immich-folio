@@ -191,6 +191,7 @@ export default function DiagnosticsView() {
   }, [fetchStatus, dict.shell, t]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a load started on mount; Run again calls it too, so it stays a function (#821)
     run();
   }, [run]);
 
