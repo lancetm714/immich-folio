@@ -8,11 +8,14 @@
  * A card expands into the selected photos and the export buttons.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import PageHeader from './PageHeader';
 import * as Icons from './Icons';
 import { reportIfSessionExpired } from './sessionExpiry';
+import { useAdminFetch } from './useAdminFetch';
+import AdminLoadState from './AdminLoadState';
 import type { AdminProofPick, AdminProofSession } from '@/lib/admin/proofing-view';
+import { rich, useAdminDictionary } from './AdminI18n';
 
 interface AlbumOption {
   id: string;
@@ -22,17 +25,8 @@ interface AlbumOption {
 
 type Download = AdminProofSession['download'];
 
-const STATE_LABEL: Record<AdminProofSession['state'], string> = {
-  open: 'Open',
-  submitted: 'Submitted',
-  expired: 'Expired',
-};
-
-const DOWNLOAD_LABEL: Record<Download, string> = {
-  none: 'No downloads',
-  selection: 'Selection as ZIP',
-  album: 'Whole album as ZIP',
-};
+/** In the order the download select offers them. */
+const DOWNLOADS: Download[] = ['none', 'selection', 'album'];
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
@@ -40,6 +34,7 @@ function formatDate(iso: string | null): string {
   return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+/** Changes; the loads go through useAdminFetch. */
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (reportIfSessionExpired(res)) throw new Error('Session expired');
@@ -49,7 +44,15 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 function CreateForm({ onCreated }: { onCreated: () => void }) {
-  const [albums, setAlbums] = useState<AlbumOption[] | null>(null);
+  const p = useAdminDictionary().visitors.proofing;
+  const t = p.create;
+  const albumsLoad = useAdminFetch<{ albums: AlbumOption[] }>('/api/admin/albums');
+  const albums = useMemo(
+    () =>
+      albumsLoad.data &&
+      [...albumsLoad.data.albums].sort((a, b) => a.albumName.localeCompare(b.albumName)),
+    [albumsLoad.data],
+  );
   const [clientName, setClientName] = useState('');
   const [albumId, setAlbumId] = useState('');
   const [expiresOn, setExpiresOn] = useState('');
@@ -57,14 +60,6 @@ function CreateForm({ onCreated }: { onCreated: () => void }) {
   const [limit, setLimit] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api<{ albums: AlbumOption[] }>('/api/admin/albums')
-      .then((data) =>
-        setAlbums([...data.albums].sort((a, b) => a.albumName.localeCompare(b.albumName))),
-      )
-      .catch((err: Error) => setError(err.message));
-  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,23 +94,23 @@ function CreateForm({ onCreated }: { onCreated: () => void }) {
     <form className="analytics-panel proofing-create" onSubmit={submit}>
       <div className="analytics-section-title">
         <h3>
-          <Icons.IconPlus size={16} /> New client link
+          <Icons.IconPlus size={16} /> {t.title}
         </h3>
       </div>
       <div className="proofing-create-grid">
         <div className="admin-field">
-          <label htmlFor="proof-client">Client</label>
+          <label htmlFor="proof-client">{t.client}</label>
           <input
             id="proof-client"
             value={clientName}
             onChange={(e) => setClientName(e.target.value)}
-            placeholder="Anna & Ben"
+            placeholder={t.clientPlaceholder}
             maxLength={120}
             required
           />
         </div>
         <div className="admin-field">
-          <label htmlFor="proof-album">Album</label>
+          <label htmlFor="proof-album">{t.album}</label>
           <select
             id="proof-album"
             value={albumId}
@@ -123,7 +118,7 @@ function CreateForm({ onCreated }: { onCreated: () => void }) {
             required
             disabled={!albums}
           >
-            <option value="">{albums ? 'Choose an Immich album…' : 'Loading albums…'}</option>
+            <option value="">{albums ? t.chooseAlbum : t.loadingAlbums}</option>
             {albums?.map((album) => (
               <option key={album.id} value={album.id}>
                 {album.albumName} ({album.assetCount})
@@ -132,7 +127,7 @@ function CreateForm({ onCreated }: { onCreated: () => void }) {
           </select>
         </div>
         <div className="admin-field">
-          <label htmlFor="proof-expires">Valid until (optional)</label>
+          <label htmlFor="proof-expires">{t.validUntil}</label>
           <input
             id="proof-expires"
             type="date"
@@ -141,22 +136,22 @@ function CreateForm({ onCreated }: { onCreated: () => void }) {
           />
         </div>
         <div className="admin-field">
-          <label htmlFor="proof-download">Downloads</label>
+          <label htmlFor="proof-download">{t.downloads}</label>
           <select
             id="proof-download"
             value={download}
             onChange={(e) => setDownload(e.target.value as Download)}
           >
-            {(Object.keys(DOWNLOAD_LABEL) as Download[]).map((key) => (
+            {DOWNLOADS.map((key) => (
               <option key={key} value={key}>
-                {DOWNLOAD_LABEL[key]}
+                {p.downloads[key]}
               </option>
             ))}
           </select>
         </div>
         {download !== 'none' && (
           <div className="admin-field">
-            <label htmlFor="proof-limit">Download limit (optional)</label>
+            <label htmlFor="proof-limit">{t.limit}</label>
             <input
               id="proof-limit"
               type="number"
@@ -164,11 +159,12 @@ function CreateForm({ onCreated }: { onCreated: () => void }) {
               max={1000}
               value={limit}
               onChange={(e) => setLimit(e.target.value)}
-              placeholder="Unlimited"
+              placeholder={t.unlimited}
             />
           </div>
         )}
       </div>
+      <AdminLoadState loading={false} error={albumsLoad.error} onRetry={albumsLoad.reload} />
       {error && <p className="admin-error">{error}</p>}
       <div>
         <button
@@ -176,7 +172,7 @@ function CreateForm({ onCreated }: { onCreated: () => void }) {
           className="admin-btn admin-btn-primary"
           disabled={busy || !clientName.trim() || !albumId}
         >
-          <Icons.IconLink size={14} /> {busy ? 'Creating…' : 'Create link'}
+          <Icons.IconLink size={14} /> {busy ? t.creating : t.submit}
         </button>
       </div>
     </form>
@@ -194,21 +190,21 @@ function SessionCard({
   onToggle: () => void;
   onChanged: () => void;
 }) {
-  const [picks, setPicks] = useState<AdminProofPick[] | null>(null);
+  const p = useAdminDictionary().visitors.proofing;
+  const t = p.card;
+  // Fetched again when the client changes the selection or submits it.
+  const picksLoad = useAdminFetch<{ picks: AdminProofPick[] }>(
+    expanded ? `/api/admin/proofing/${session.id}` : null,
+    `${session.selected}:${session.submittedAt}`,
+  );
+  const picks = picksLoad.data?.picks ?? null;
   const [copied, setCopied] = useState<'link' | 'lightroom' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const linkUrl = typeof window !== 'undefined' ? `${window.location.origin}${session.link}` : '';
 
-  useEffect(() => {
-    if (!expanded) return;
-    api<{ picks: AdminProofPick[] }>(`/api/admin/proofing/${session.id}`)
-      .then((data) => setPicks(data.picks))
-      .catch((err: Error) => setError(err.message));
-  }, [expanded, session.id, session.selected, session.submittedAt]);
-
   const copy = (kind: 'link' | 'lightroom', text: string) => {
     if (!navigator.clipboard) {
-      window.prompt('Copy:', text);
+      window.prompt(t.copyPrompt, text);
       return;
     }
     navigator.clipboard.writeText(text).then(
@@ -216,7 +212,7 @@ function SessionCard({
         setCopied(kind);
         setTimeout(() => setCopied(null), 2000);
       },
-      () => window.prompt('Copy:', text),
+      () => window.prompt(t.copyPrompt, text),
     );
   };
 
@@ -235,7 +231,7 @@ function SessionCard({
   };
 
   const remove = async () => {
-    if (!window.confirm(`Delete the link for ${session.clientName}? It stops working at once.`)) {
+    if (!window.confirm(t.deleteConfirm(session.clientName))) {
       return;
     }
     try {
@@ -259,10 +255,14 @@ function SessionCard({
 
   const downloadsText =
     session.download === 'none'
-      ? DOWNLOAD_LABEL.none
-      : `${DOWNLOAD_LABEL[session.download]} · ${session.downloadsUsed}${
-          session.downloadLimit !== null ? ` / ${session.downloadLimit}` : ''
-        } used`;
+      ? p.downloads.none
+      : `${p.downloads[session.download]} · ${t.downloadsUsed(session.downloadsUsed, session.downloadLimit)}`;
+  const summary = [
+    session.albumName ?? t.albumMissing,
+    t.selected(session.selected, session.albumAssetCount),
+    t.created(formatDate(session.createdAt)),
+    ...(session.expiresOn ? [t.validUntil(formatDate(session.expiresOn))] : []),
+  ].join(' · ');
 
   return (
     <div className={`analytics-panel proofing-card proofing-card--${session.state}`}>
@@ -271,18 +271,13 @@ function SessionCard({
           <h3 className="proofing-card-title">
             {session.clientName}
             <span className={`proofing-badge proofing-badge--${session.state}`}>
-              {STATE_LABEL[session.state]}
+              {p.states[session.state]}
             </span>
           </h3>
-          <p className="analytics-subtitle">
-            {session.albumName ?? 'Album not found in Immich'} · {session.selected}
-            {session.albumAssetCount !== null ? ` of ${session.albumAssetCount}` : ''} selected ·
-            created {formatDate(session.createdAt)}
-            {session.expiresOn ? ` · valid until ${formatDate(session.expiresOn)}` : ''}
-          </p>
+          <p className="analytics-subtitle">{summary}</p>
           <p className="analytics-subtitle">
             {downloadsText}
-            {session.submittedAt ? ` · submitted ${formatDate(session.submittedAt)}` : ''}
+            {session.submittedAt ? ` · ${t.submitted(formatDate(session.submittedAt))}` : ''}
           </p>
         </div>
         <div className="proofing-card-actions">
@@ -292,7 +287,7 @@ function SessionCard({
             onClick={() => copy('link', linkUrl)}
           >
             {copied === 'link' ? <Icons.IconCheck size={14} /> : <Icons.IconCopy size={14} />}{' '}
-            {copied === 'link' ? 'Copied' : 'Copy link'}
+            {copied === 'link' ? t.copied : t.copyLink}
           </button>
           <a
             className="admin-btn admin-btn-ghost admin-btn-sm"
@@ -300,7 +295,7 @@ function SessionCard({
             target="_blank"
             rel="noreferrer"
           >
-            <Icons.IconEye size={14} /> Open
+            <Icons.IconEye size={14} /> {t.open}
           </a>
           <button
             type="button"
@@ -309,7 +304,7 @@ function SessionCard({
             aria-expanded={expanded}
           >
             {expanded ? <Icons.IconChevronUp size={14} /> : <Icons.IconChevronDown size={14} />}{' '}
-            Selection
+            {t.selection}
           </button>
         </div>
       </div>
@@ -324,14 +319,14 @@ function SessionCard({
               className="admin-btn admin-btn-primary admin-btn-sm"
               onClick={copyLightroom}
               disabled={session.selected === 0}
-              title="File names without extension, comma-separated — paste into Lightroom's or Capture One's filename filter to find the RAW files too"
+              title={t.lightroomTitle}
             >
               {copied === 'lightroom' ? (
                 <Icons.IconCheck size={14} />
               ) : (
                 <Icons.IconCopy size={14} />
               )}{' '}
-              {copied === 'lightroom' ? 'Copied' : 'Copy file names (Lightroom)'}
+              {copied === 'lightroom' ? t.copied : t.copyLightroom}
             </button>
             <a
               className="admin-btn admin-btn-ghost admin-btn-sm"
@@ -351,7 +346,7 @@ function SessionCard({
                 className="admin-btn admin-btn-ghost admin-btn-sm"
                 onClick={() => patch({ reopen: true })}
               >
-                <Icons.IconRefresh size={14} /> Reopen for changes
+                <Icons.IconRefresh size={14} /> {t.reopen}
               </button>
             )}
             {session.download !== 'none' && session.downloadsUsed > 0 && (
@@ -360,7 +355,7 @@ function SessionCard({
                 className="admin-btn admin-btn-ghost admin-btn-sm"
                 onClick={() => patch({ resetDownloads: true })}
               >
-                <Icons.IconRefresh size={14} /> Reset downloads
+                <Icons.IconRefresh size={14} /> {t.resetDownloads}
               </button>
             )}
             <button
@@ -368,14 +363,16 @@ function SessionCard({
               className="admin-btn admin-btn-ghost admin-btn-sm admin-btn-icon-danger"
               onClick={remove}
             >
-              <Icons.IconTrash size={14} /> Delete link
+              <Icons.IconTrash size={14} /> {t.deleteLink}
             </button>
           </div>
 
-          {picks === null ? (
+          {picksLoad.error ? (
+            <AdminLoadState loading={false} error={picksLoad.error} onRetry={picksLoad.reload} />
+          ) : picks === null ? (
             <div className="admin-spinner" />
           ) : picks.length === 0 ? (
-            <p className="analytics-empty">No photos selected yet.</p>
+            <p className="analytics-empty">{t.noPicks}</p>
           ) : (
             <ul className="proofing-picks">
               {picks.map((pick) => (
@@ -396,70 +393,61 @@ function SessionCard({
 }
 
 export default function ProofingView() {
-  const [sessions, setSessions] = useState<AdminProofSession[] | null>(null);
-  const [webhookConfigured, setWebhookConfigured] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const v = useAdminDictionary().visitors;
+  const t = v.proofing;
+  const list = useAdminFetch<{ sessions: AdminProofSession[]; webhookConfigured: boolean }>(
+    '/api/admin/proofing',
+  );
+  const sessions = list.data?.sessions ?? null;
+  const webhookConfigured = list.data?.webhookConfigured ?? true;
+  const load = list.reload;
   const [expanded, setExpanded] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const data = await api<{ sessions: AdminProofSession[]; webhookConfigured: boolean }>(
-        '/api/admin/proofing',
-      );
-      setSessions(data.sessions);
-      setWebhookConfigured(data.webhookConfigured);
-      setError(null);
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }, []);
 
   useEffect(() => {
     // The webhook's admin link lands here with ?session=<id>: open that card.
     const wanted = new URLSearchParams(window.location.search).get('session');
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of the URL on mount
     if (wanted) setExpanded(wanted);
-    void load();
-  }, [load]);
+  }, []);
 
   return (
     <div className="analytics-view proofing-view">
       <PageHeader
-        kicker="Visitors"
-        title="Client proofing"
-        description="A private link per client. Picks are saved as they go; you see them here once they submit."
+        kicker={v.kicker}
+        title={t.title}
+        description={t.description}
         actions={
-          <button className="admin-btn admin-btn-ghost admin-btn-sm" onClick={() => void load()}>
-            <Icons.IconRefresh size={14} /> Refresh
+          <button className="admin-btn admin-btn-ghost admin-btn-sm" onClick={load}>
+            <Icons.IconRefresh size={14} /> {v.refresh}
           </button>
         }
       />
 
       {!webhookConfigured && (
         <p className="analytics-subtitle">
-          Tip: set <code>PROOFING_WEBHOOK_URL</code> to be notified (Discord, Slack, Gotify, n8n, …)
-          when a client submits.
+          {rich(t.webhookTip, { env: <code>PROOFING_WEBHOOK_URL</code> })}
         </p>
       )}
 
-      <CreateForm onCreated={() => void load()} />
+      <CreateForm onCreated={load} />
 
-      {error && <p className="admin-error">{error}</p>}
+      <AdminLoadState
+        loading={list.loading}
+        error={list.error}
+        onRetry={load}
+        hasData={sessions !== null}
+      />
 
-      {sessions === null && !error ? (
-        <div className="admin-loading-container">
-          <div className="admin-spinner" />
-        </div>
-      ) : sessions && sessions.length === 0 ? (
-        <p className="analytics-empty">No client links yet.</p>
+      {sessions === null ? null : sessions.length === 0 ? (
+        <p className="analytics-empty">{t.empty}</p>
       ) : (
-        sessions?.map((session) => (
+        sessions.map((session) => (
           <SessionCard
             key={session.id}
             session={session}
             expanded={expanded === session.id}
             onToggle={() => setExpanded((cur) => (cur === session.id ? null : session.id))}
-            onChanged={() => void load()}
+            onChanged={load}
           />
         ))
       )}

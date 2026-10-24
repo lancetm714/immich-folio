@@ -31,17 +31,20 @@ import SecuritySection from './settings/SecuritySection';
 import AboutSection, { useAboutEditor } from './settings/AboutSection';
 import PageHeader from './PageHeader';
 import { sameDraft } from './sameDraft';
+import { useAdminDictionary } from './AdminI18n';
+import { adminGet } from './useAdminFetch';
 
+/** Nav order; the labels come from the dictionary (`settings.editor.sections`). */
 const SETTINGS_SECTIONS = [
-  { id: 'general', label: 'General' },
-  { id: 'theme', label: 'Theme' },
-  { id: 'grid', label: 'Grid' },
-  { id: 'footer', label: 'Footer' },
-  { id: 'legal', label: 'Legal' },
-  { id: 'seo', label: 'SEO' },
-  { id: 'security', label: 'Security & Protection' },
-  { id: 'about', label: 'About' },
-];
+  'general',
+  'theme',
+  'grid',
+  'footer',
+  'legal',
+  'seo',
+  'security',
+  'about',
+] as const;
 
 function withoutSitePassword(settings: Settings): Settings {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -57,11 +60,13 @@ function withSitePasswordOf(draft: Settings, source: Settings): Settings {
 
 export default function SettingsEditor() {
   const router = useRouter();
+  const dict = useAdminDictionary();
+  const t = dict.settings.editor;
   // Read here rather than passed in: the editor is mounted by the settings
   // layout, which does not receive the child route's params.
   const section = useParams<{ section?: string }>()?.section;
   // An unknown section in the URL falls back to General instead of an empty panel.
-  const activeSection = SETTINGS_SECTIONS.some((sec) => sec.id === section)
+  const activeSection = SETTINGS_SECTIONS.some((id) => id === section)
     ? (section as string)
     : 'general';
   const [settings, setSettings] = useState<Settings>({});
@@ -151,44 +156,32 @@ export default function SettingsEditor() {
   async function loadSettings() {
     setLoading(true);
     setLoadError(null);
-    try {
-      const res = await fetch('/api/admin/settings');
-      if (!res.ok) {
-        // 401 is the common one: the session lasts 24h and nothing re-checks
-        // it, so a tab left open overnight lands here. reportIfSessionExpired
-        // also drops the whole panel back to the login screen (#596); the
-        // thrown message below still covers the brief moment before that
-        // re-render happens, and any other non-ok status.
-        reportIfSessionExpired(res);
-        throw new Error(
-          res.status === 401
-            ? 'Your session has expired. Sign in again to continue.'
-            : `The server answered ${res.status}.`,
-        );
-      }
-      const {
-        settings: data,
-        siteUrl,
-        envLocks: locks,
-        version,
-        siteTitleEnv: titleEnv,
-      } = await res.json();
-      const loaded: Settings = data || {};
-      versionRef.current = typeof version === 'string' ? version : null;
-      setServerSettings(loaded);
-      const restoredDraft = settingsDraft.load(JSON.stringify(withoutSitePassword(loaded)));
-      const restored = restoredDraft && withSitePasswordOf(restoredDraft, loaded);
-      setSettings(restored ?? loaded);
-      setDirty(restored !== null);
-      setSiteUrlInfo(siteUrl ?? null);
-      setEnvLocks(locks ?? {});
-      setSiteTitleEnv(typeof titleEnv === 'string' ? titleEnv : null);
-    } catch (err) {
-      console.error('Failed to load settings:', err);
-      setLoadError(err instanceof Error ? err.message : 'The settings could not be loaded.');
-    } finally {
+    // A 401 also drops the whole panel back to the login screen (#596);
+    // adminGet raises that and words the error for the moment before.
+    const r = await adminGet<{
+      settings?: Settings;
+      siteUrl?: NonNullable<typeof siteUrlInfo>;
+      envLocks?: EnvLocks;
+      version?: unknown;
+      siteTitleEnv?: unknown;
+    }>('/api/admin/settings', dict.shell);
+    if (r.error !== null) {
+      setLoadError(r.error);
       setLoading(false);
+      return;
     }
+    const { settings: data, siteUrl, envLocks: locks, version, siteTitleEnv: titleEnv } = r.data;
+    const loaded: Settings = data || {};
+    versionRef.current = typeof version === 'string' ? version : null;
+    setServerSettings(loaded);
+    const restoredDraft = settingsDraft.load(JSON.stringify(withoutSitePassword(loaded)));
+    const restored = restoredDraft && withSitePasswordOf(restoredDraft, loaded);
+    setSettings(restored ?? loaded);
+    setDirty(restored !== null);
+    setSiteUrlInfo(siteUrl ?? null);
+    setEnvLocks(locks ?? {});
+    setSiteTitleEnv(typeof titleEnv === 'string' ? titleEnv : null);
+    setLoading(false);
   }
 
   /** Write several paths in one state update — used by the metadata master switch. */
@@ -258,14 +251,14 @@ export default function SettingsEditor() {
         '/api/admin/settings',
         { settings: cleaned },
         versionRef,
-        'The settings file',
+        'settings',
       );
 
       if (result.kind === 'reload') {
         settingsDraft.discard();
         await loadSettings();
       } else if (result.kind === 'keep') {
-        setSaveStatus({ kind: 'error', message: 'Not saved — the settings changed elsewhere.' });
+        setSaveStatus({ kind: 'error', message: t.conflict });
       } else if (result.kind === 'saved') {
         const data = result.data;
         // The site password is stored hashed (#690); show that, not the typed text.
@@ -287,7 +280,7 @@ export default function SettingsEditor() {
         if (!editedMeanwhile) setDirty(false);
         setSaveStatus({
           kind: 'success',
-          message: typeof data.message === 'string' ? data.message : 'Saved!',
+          message: typeof data.message === 'string' ? data.message : t.saved,
         });
         router.refresh();
         setTimeout(() => setSaveStatus(null), 5000);
@@ -303,11 +296,13 @@ export default function SettingsEditor() {
           : [];
         setSaveStatus({
           kind: 'error',
-          message: `Error: ${err.error ?? `HTTP ${result.res.status}`}${fields.length ? ` — ${fields.join(', ')}` : ''}`,
+          message: dict.common.errorWith(
+            `${err.error ?? `HTTP ${result.res.status}`}${fields.length ? ` — ${fields.join(', ')}` : ''}`,
+          ),
         });
       }
     } catch {
-      setSaveStatus({ kind: 'error', message: 'Error: Failed to save' });
+      setSaveStatus({ kind: 'error', message: dict.common.errorWith(t.saveFailed) });
     } finally {
       setSaving(false);
     }
@@ -339,13 +334,10 @@ export default function SettingsEditor() {
   if (loadError) {
     return (
       <div className="admin-error" role="alert">
-        <strong>Settings could not be loaded.</strong> {loadError}
-        <p>
-          Nothing has been changed. Saving stays disabled until they load, so an empty form cannot
-          overwrite your configuration.
-        </p>
+        <strong>{t.loadErrorTitle}</strong> {loadError}
+        <p>{t.loadErrorBody}</p>
         <button className="admin-btn admin-btn-secondary" onClick={loadSettings}>
-          Try again
+          {dict.common.retry}
         </button>
       </div>
     );
@@ -369,7 +361,7 @@ export default function SettingsEditor() {
         saving={saving || about.saving}
         status={saveBarStatus}
         onSave={saveAll}
-        label="Save Changes"
+        label={t.saveChanges}
       />
 
       <DraftNotice
@@ -391,29 +383,25 @@ export default function SettingsEditor() {
       />
       <DraftNotice
         status={about.draftStatus}
-        subject="About page"
+        subject="about"
         onDiscard={about.discardDraft}
         onRestore={about.restoreDraft}
         onDismiss={about.dismissDraft}
       />
 
-      <PageHeader
-        kicker="Site"
-        title="Settings"
-        description="Saved changes apply to the site at once, no restart needed."
-      />
+      <PageHeader kicker={t.kicker} title={t.title} description={t.description} />
 
       <div className="settings-layout">
         {/* Sidebar */}
         <nav className="settings-nav">
-          {SETTINGS_SECTIONS.map((sec) => (
+          {SETTINGS_SECTIONS.map((id) => (
             <Link
-              key={sec.id}
-              href={`/admin/settings/${sec.id}`}
-              className={`settings-nav-item ${activeSection === sec.id ? 'active' : ''}`}
-              aria-current={activeSection === sec.id ? 'page' : undefined}
+              key={id}
+              href={`/admin/settings/${id}`}
+              className={`settings-nav-item ${activeSection === id ? 'active' : ''}`}
+              aria-current={activeSection === id ? 'page' : undefined}
             >
-              {sec.label}
+              {t.sections[id]}
             </Link>
           ))}
         </nav>

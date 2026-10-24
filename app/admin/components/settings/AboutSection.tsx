@@ -7,6 +7,8 @@ import { useDraft, readDraft } from '../useDraft';
 import { useContentRestored } from '../contentRestored';
 import { useVersionedSave } from '../useVersionedSave';
 import { useLatest } from '../useLatest';
+import { useAdminDictionary } from '../AdminI18n';
+import { adminGet } from '../useAdminFetch';
 
 interface AboutMeta {
   portrait?: string;
@@ -47,6 +49,9 @@ function aboutFingerprint(about: AboutDraft): string {
  * save bar has to keep offering it.
  */
 export function useAboutEditor(active: boolean) {
+  const dict = useAdminDictionary();
+  const t = dict.settings.about;
+  const editor = dict.settings.editor;
   const [aboutMeta, setAboutMeta] = useState<AboutMeta>({});
   const [aboutBody, setAboutBody] = useState('');
   const [aboutLoading, setAboutLoading] = useState(false);
@@ -79,42 +84,34 @@ export function useAboutEditor(active: boolean) {
   const loadAboutContent = useCallback(async () => {
     setAboutLoading(true);
     setAboutStatus(null);
-    try {
-      const res = await fetch('/api/admin/about');
-      if (!res.ok) {
-        throw new Error(
-          res.status === 401
-            ? 'Your session has expired. Sign in again to continue.'
-            : `The server answered ${res.status}.`,
-        );
-      }
-      const data = await res.json();
-      versionRef.current = typeof data.version === 'string' ? data.version : null;
-      const loaded: AboutDraft = {
-        meta: data.meta || {},
-        body: data.body || '',
-        gearText: data.meta?.gear?.join('\n') || '',
-      };
-      setServerAbout(loaded);
-      const restored = loadDraft(aboutFingerprint(loaded));
-      const value = restored ?? loaded;
-      setAboutMeta(value.meta);
-      setAboutBody(value.body);
-      setAboutGearText(value.gearText);
-      setAboutDirty(restored !== null);
-      setAboutLoaded(true);
-    } catch (err) {
-      console.error('Failed to load about content:', err);
+    const r = await adminGet<{ version?: unknown; meta?: AboutDraft['meta']; body?: string }>(
+      '/api/admin/about',
+      dict.shell,
+    );
+    if (r.error !== null) {
       // aboutLoaded stays false, which is what blocks the save below: an empty
       // editor written to about.md would replace the page with nothing.
-      setAboutStatus({
-        kind: 'error',
-        message: `Error: ${err instanceof Error ? err.message : 'The About page could not be loaded.'}`,
-      });
-    } finally {
+      setAboutStatus({ kind: 'error', message: dict.common.errorWith(r.error) });
       setAboutLoading(false);
+      return;
     }
-  }, [loadDraft]);
+    const data = r.data;
+    versionRef.current = typeof data.version === 'string' ? data.version : null;
+    const loaded: AboutDraft = {
+      meta: data.meta || {},
+      body: data.body || '',
+      gearText: data.meta?.gear?.join('\n') || '',
+    };
+    setServerAbout(loaded);
+    const restored = loadDraft(aboutFingerprint(loaded));
+    const value = restored ?? loaded;
+    setAboutMeta(value.meta);
+    setAboutBody(value.body);
+    setAboutGearText(value.gearText);
+    setAboutDirty(restored !== null);
+    setAboutLoaded(true);
+    setAboutLoading(false);
+  }, [loadDraft, dict]);
 
   async function saveAboutContent() {
     if (!aboutLoaded) return;
@@ -140,13 +137,13 @@ export function useAboutEditor(active: boolean) {
         '/api/admin/about',
         { meta: cleanedMeta, body: aboutBody },
         versionRef,
-        'The About page',
+        'about',
       );
       if (result.kind === 'reload') {
         draft.discard();
         await loadAboutContent();
       } else if (result.kind === 'keep') {
-        setAboutStatus({ kind: 'error', message: 'Not saved — the About page changed elsewhere.' });
+        setAboutStatus({ kind: 'error', message: t.conflict });
       } else if (result.kind === 'saved') {
         const data = result.data;
         const saved: AboutDraft = { meta: cleanedMeta, body: aboutBody, gearText: aboutGearText };
@@ -159,17 +156,17 @@ export function useAboutEditor(active: boolean) {
         if (!editedMeanwhile) setAboutDirty(false);
         setAboutStatus({
           kind: 'success',
-          message: typeof data.message === 'string' ? data.message : 'Saved!',
+          message: typeof data.message === 'string' ? data.message : editor.saved,
         });
         setTimeout(() => setAboutStatus(null), 4000);
       } else {
         setAboutStatus({
           kind: 'error',
-          message: `Error: ${result.data?.error ?? `HTTP ${result.res.status}`}`,
+          message: dict.common.errorWith(result.data?.error ?? `HTTP ${result.res.status}`),
         });
       }
     } catch {
-      setAboutStatus({ kind: 'error', message: 'Error: Failed to save' });
+      setAboutStatus({ kind: 'error', message: dict.common.errorWith(editor.saveFailed) });
     } finally {
       setAboutSaving(false);
     }
@@ -179,12 +176,14 @@ export function useAboutEditor(active: boolean) {
   // stays mounted across sections, so reloading on every visit would overwrite
   // unsaved About edits with the file on disk.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a load started on mount; a save or restore calls it again, so it stays a function (#821)
     if (active && !aboutLoaded) loadAboutContent();
   }, [active, aboutLoaded, loadAboutContent]);
 
   // A kept About draft loads the file at once, from any section, so the save
   // bar owns up to those edits before the About section is ever opened.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a load started on mount; a save or restore calls it again, so it stays a function (#821)
     if (!active && readDraft('about')) loadAboutContent();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -240,16 +239,14 @@ export function useAboutEditor(active: boolean) {
 export type AboutEditor = ReturnType<typeof useAboutEditor>;
 
 export default function AboutSection({ about }: { about: AboutEditor }) {
+  const t = useAdminDictionary().settings.about;
   return (
     <div className="settings-panel">
       <div className="settings-section-header">
         <h3>
-          <Icons.IconCamera size={18} /> About Page
+          <Icons.IconCamera size={18} /> {t.title}
         </h3>
-        <p className="settings-section-sub">
-          Edit the portrait, biography and gear shown on the About page. Use General to show or hide
-          the page itself.
-        </p>
+        <p className="settings-section-sub">{t.sub}</p>
       </div>
 
       {about.loading ? (
@@ -257,34 +254,34 @@ export default function AboutSection({ about }: { about: AboutEditor }) {
       ) : (
         <>
           <div className="admin-field">
-            <label htmlFor="about-portrait-asset-id">Portrait Asset ID</label>
+            <label htmlFor="about-portrait-asset-id">{t.portrait}</label>
             <input
               id="about-portrait-asset-id"
               value={about.meta.portrait || ''}
               onChange={(e) => about.updateMeta('portrait', e.target.value)}
-              placeholder="Immich asset UUID for the portrait photo"
+              placeholder={t.portraitPlaceholder}
             />
           </div>
           <div className="admin-field">
-            <label htmlFor="about-name">Name</label>
+            <label htmlFor="about-name">{t.name}</label>
             <input
               id="about-name"
               value={about.meta.name || ''}
               onChange={(e) => about.updateMeta('name', e.target.value)}
-              placeholder="Your name"
+              placeholder={t.namePlaceholder}
             />
           </div>
           <div className="admin-field">
-            <label htmlFor="about-location">Location</label>
+            <label htmlFor="about-location">{t.location}</label>
             <input
               id="about-location"
               value={about.meta.location || ''}
               onChange={(e) => about.updateMeta('location', e.target.value)}
-              placeholder="City, Country"
+              placeholder={t.locationPlaceholder}
             />
           </div>
           <div className="admin-field">
-            <label htmlFor="about-gear">Gear (one per line)</label>
+            <label htmlFor="about-gear">{t.gear}</label>
             <textarea
               id="about-gear"
               value={about.gearText}
@@ -294,12 +291,12 @@ export default function AboutSection({ about }: { about: AboutEditor }) {
             />
           </div>
           <div className="admin-field">
-            <label htmlFor="about-biography">Biography (Markdown)</label>
+            <label htmlFor="about-biography">{t.biography}</label>
             <textarea
               id="about-biography"
               value={about.body}
               onChange={(e) => about.setBody(e.target.value)}
-              placeholder="Photographer based in..."
+              placeholder={t.biographyPlaceholder}
               rows={6}
             />
           </div>

@@ -65,17 +65,23 @@ export function LeafletMap({
   // mounted page, and a new dictionary object must not rebuild the map.
   const t = useDictionary();
   const labelsRef = useRef(t.map);
-  labelsRef.current = t.map;
 
   // Callers rebuild the markers array on every render; the map is only
   // rebuilt when its content changes.
   const markersKey = JSON.stringify(markers);
   const markersRef = useRef(markers);
-  markersRef.current = markers;
   const onReadyRef = useRef(onReady);
-  onReadyRef.current = onReady;
   const onErrorRef = useRef(onError);
-  onErrorRef.current = onError;
+
+  // The refs follow the latest render. An effect rather than assignments
+  // during render, which React may run and then throw away; declared before
+  // the map's own effect, so that one always reads this render's values.
+  useEffect(() => {
+    labelsRef.current = t.map;
+    markersRef.current = markers;
+    onReadyRef.current = onReady;
+    onErrorRef.current = onError;
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -96,14 +102,19 @@ export function LeafletMap({
         map.attributionControl.setPrefix(localizedLeafletPrefix(prefix, labels.leafletTitle));
       }
 
-      // OpenStreetMap's own tiles: free to use with attribution and a Referer,
-      // which the Referrer-Policy sends. CARTO's Dark Matter, used before,
-      // started answering every tile with "API KEY REQUIRED". The dark look
-      // comes from a filter in app/leaflet.css, so it follows the colour mode.
+      // OpenStreetMap's own tiles: free to use with attribution and a Referer.
+      // Without one, every tile is an "Access blocked" image. The policy is set
+      // on the tiles themselves because a proxy in front of the site can
+      // replace the page's Referrer-Policy with one that sends nothing
+      // cross-origin (#851).
+      // CARTO's Dark Matter, used before, started answering every tile with
+      // "API KEY REQUIRED". The dark look comes from a filter in
+      // app/leaflet.css, so it follows the colour mode.
       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 19,
+        referrerPolicy: 'strict-origin-when-cross-origin',
       }).addTo(map);
 
       const current = markersRef.current;

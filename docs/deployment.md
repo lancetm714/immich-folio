@@ -4,13 +4,15 @@ Operational detail for running Immich Folio: what the setup wizard writes, the
 Docker options beyond the basic Compose recipe, and what happens when Immich
 goes away.
 
-For the quick path — clone, `npm run dev`, open `/install` — see the
-[README](../README.md#quick-start).
+For the quick path (clone, `npm run dev`, open `/install`) see the
+[README](../README.md#quick-start). For the Immich side, see [Immich setup](immich-setup.md).
 
 **Contents:**
 
+- [First-Run Setup](#first-run-setup)
 - [What the Setup Wizard Writes](#what-the-setup-wizard-writes)
 - [Environment Variables Always Win](#environment-variables-always-win)
+- [Environment Variables](#environment-variables)
 - [Docker Compose](#docker-compose)
 - [Standalone Docker](#standalone-docker)
 - [Health Check](#health-check)
@@ -21,22 +23,63 @@ For the quick path — clone, `npm run dev`, open `/install` — see the
 - [Edits made in Immich](#edits-made-in-immich)
 - [Colour Profiles](#colour-profiles)
 
+## First-Run Setup
+
+A deployment with no `gallery.yaml` and no Immich credentials serves a setup
+screen. The wizard at **`/install`** fills both in from the browser: it connects
+to Immich, lets you pick albums (optional — you can add them later in `/admin`),
+and names the site. Nothing is written until your credentials have been verified
+against your Immich server, so a typo cannot leave you with an "installed" site
+that loads no photos.
+
+**The wizard is gated by a one-time token** printed to the server log on first
+access, because a fresh deployment is reachable before it has any configuration —
+and without the gate, whoever finds the URL first could configure it:
+
+```
+══════════════════════════════════════════════════════
+  Immich Folio — First-run setup token
+══════════════════════════════════════════════════════
+  Token:  PTmUKFIdce2DwuqBG71RAExH7tVxceXX
+```
+
+Read it from your container logs (`docker logs immich-folio`, or
+`docker compose logs lightbox` — `immich-folio` is the container name, `lightbox`
+the service) and append it to the URL:
+
+```
+http://your-site/install?token=PTmUKFIdce2DwuqBG71RAExH7tVxceXX
+```
+
+The token is stored in `content/.setup-token` (mode `0600`) so it survives a
+restart, and is deleted once setup completes. From then on `/install` redirects
+to the gallery and its API routes refuse to run again.
+
+The wizard writes `gallery.yaml`, `settings.yaml` and `content/install.json`.
+When you enter an API key in the wizard, it is stored in `install.json`;
+environment-only keys are not copied there. If the server already has Immich
+credentials configured, the wizard can reuse them for that same server without
+showing the key in the browser. Changing the server URL requires entering a key
+for that server.
+
+The next section lists what the wizard writes, and environment variables take precedence over it.
+
 ## What the Setup Wizard Writes
 
 The wizard at `/install` writes three files into `content/`:
 
-| File                    | Contents                                                             |
-| ----------------------- | -------------------------------------------------------------------- |
-| `content/gallery.yaml`  | The albums you picked                                                |
-| `content/settings.yaml` | Site title, subtitle, theme — only if it does not exist yet          |
-| `content/install.json`  | Immich URL and API key, a generated site secret, admin password hash |
+| File                    | Contents                                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------ |
+| `content/gallery.yaml`  | The albums you picked                                                                            |
+| `content/settings.yaml` | Site title, subtitle, theme — only if it does not exist yet                                      |
+| `content/install.json`  | Immich URL, a wizard-entered API key when supplied, a generated site secret, admin password hash |
 
 > [!IMPORTANT]
-> **`content/install.json` holds credentials.** It is written with mode `0600`,
-> and it is the reason a backup of your `content/` directory is also a backup of
-> your Immich API key — treat it accordingly. The admin password is stored as an
-> scrypt hash, not as you typed it; the API key and site secret have to stay
-> readable to be usable.
+> **`content/install.json` may hold credentials.** It is written with mode
+> `0600`; if you entered an API key in the wizard, a backup of `content/` also
+> contains that key. An API key supplied only through the environment remains
+> in the environment and is not copied into the file. The admin password is
+> stored as an scrypt hash, not as you typed it.
 
 Nothing is written until your credentials have been verified against your Immich
 server, so a typo cannot leave you with an "installed" site that loads no photos.
@@ -51,6 +94,36 @@ anything in `install.json`, so any of them can be rotated by setting the variabl
 
 Set all of them up front and the wizard never appears, which is the usual choice
 for an infrastructure-as-code deployment.
+
+## Environment Variables
+
+Set in `.env.local`, or in the Docker environment.
+
+```env
+# Required
+IMMICH_API_URL=http://your-immich-server:2283
+IMMICH_API_KEY=your-api-key
+
+# Optional
+SITE_TITLE=My Photography            # default: "Gallery"
+SITE_SUBTITLE=A visual journal        # default: empty
+CACHE_TTL=300                          # seconds, default: 300
+STALE_MAX_AGE=86400                    # seconds an expired cache entry survives during an outage, default: 86400 (24h), 0 disables
+IMMICH_TIMEOUT_MS=15000                # Immich response wait, default: 15000
+IMAGE_CACHE_VERSION=1                  # bump to bust browser image caches, default: off
+RATE_LIMIT_RPM=1500                    # requests/min/IP for images, default: 1500
+AUTH_SECRET=long-random-string        # required in production
+TRUSTED_PROXY_HOPS=1                   # reverse proxies in front, default: 0
+ADMIN_PASSWORD=your-secure-password   # enables /admin panel
+WEBHOOK_SECRET=long-random-string     # enables POST /api/webhook cache invalidation
+CDN_URL=https://cdn.example.com       # serve photos and videos through a pull CDN
+CONTACT_NOTIFY_URL=https://ntfy.sh/x  # push for new contact form messages, overrides settings.yaml
+PROOFING_WEBHOOK_URL=https://…         # notify on submitted client proofing selections
+```
+
+> Login and setup endpoints have their own, much lower limits that `RATE_LIMIT_RPM` does not raise — see [Rate Limiting](security.md#rate-limiting).
+
+> Behind a reverse proxy, set `TRUSTED_PROXY_HOPS` to the number of proxies in front of the app (nginx/Traefik/Caddy = 1; Cloudflare in front of nginx = 2). Without it the client IP is read from a header the client itself can set, which defeats the brute-force limits on the password endpoints. See [Trusted Proxies](security.md#trusted-proxies).
 
 ## Docker Compose
 
@@ -196,7 +269,7 @@ photos.example.com {
 > make sure they forward `X-Forwarded-For` correctly — otherwise the client IP
 > comes from a header the client itself can set, which defeats the brute-force
 > limits on the password endpoints. See
-> [Trusted Proxies](gallery-config.md#trusted-proxies) for the setting and a
+> [Trusted Proxies](security.md#trusted-proxies) for the setting and a
 > matching nginx config.
 
 Login cookies (admin session and gallery passwords) are marked `Secure` when the
