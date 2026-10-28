@@ -321,6 +321,18 @@ export default function PageBuilder() {
     // Not reachable from the UI in this state, but Cmd+S still gets here.
     if (loadError) return;
 
+    // The server rejects a subpage with no albums and no sections. Catch it
+    // here so a restored draft that lost its last album says which page is
+    // wrong instead of failing with a 400 after a round trip. The editor's
+    // Discard button returns to the saved version in that case.
+    const emptyPages = gallery.subpages
+      .filter((sp) => sp.albums.length === 0 && !(sp.sections && sp.sections.length > 0))
+      .map((sp) => sp.title || sp.name || t.drag.untitled);
+    if (emptyPages.length > 0) {
+      setSaveStatus({ kind: 'error', message: t.pageNeedsAlbum(emptyPages.join(', ')) });
+      return;
+    }
+
     setSaving(true);
     setSaveStatus(null);
 
@@ -811,6 +823,7 @@ export default function PageBuilder() {
         onSave={handleSave}
         label={t.saveChanges}
         showPreview
+        onDiscard={discardDraft}
       />
 
       <DraftNotice

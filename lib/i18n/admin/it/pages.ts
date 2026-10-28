@@ -17,6 +17,9 @@ export const pages: AdminDictionary['pages'] = {
   },
 
   builder: {
+    /** A subpage the server would refuse: it has no albums and no sections. */
+    pageNeedsAlbum: (pages: string) =>
+      `${pages} richiede almeno un album. Aggiungine uno o rimuovi la pagina.`,
     albumListFailed: (error: string) =>
       `Gli album di Immich non sono stati caricati, quindi il selettore degli album è vuoto. ${error}`,
     pageListFailed: (error: string) =>

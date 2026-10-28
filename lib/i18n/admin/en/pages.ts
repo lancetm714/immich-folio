@@ -15,6 +15,9 @@ export const pages = {
   },
 
   builder: {
+    /** A subpage the server would refuse: it has no albums and no sections. */
+    pageNeedsAlbum: (pages: string) =>
+      `${pages} needs at least one album. Add one, or remove the page.`,
     albumListFailed: (error: string) =>
       `Immich albums did not load, so the album picker is empty. ${error}`,
     pageListFailed: (error: string) =>
