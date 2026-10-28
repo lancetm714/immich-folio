@@ -461,7 +461,10 @@ class ImmichClient {
   private withOverrides(album: ImmichAlbum, config: AppConfig): ImmichAlbum {
     const name = config.albumOverrides[album.id] ?? album.albumName;
     const description = config.albumDescriptions[album.id] ?? album.description ?? '';
-    return { ...album, albumName: name, description, slug: albumSlug(name, album.id) };
+    // A custom slug wins over the one derived from the title; it is what makes
+    // an unlisted album's link hard to guess.
+    const slug = config.albumSlugs?.[album.id] ?? albumSlug(name, album.id);
+    return { ...album, albumName: name, description, slug };
   }
 
   /**

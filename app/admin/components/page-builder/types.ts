@@ -35,6 +35,11 @@ export interface AlbumEntry {
    * carried through on other entries so a save cannot drop it.
    */
   hidden?: boolean;
+  /**
+   * Custom URL slug for a standalone album. Empty means "derive it from the
+   * title"; only the standalone album drawer exposes it.
+   */
+  slug?: string;
 }
 
 export interface Section {

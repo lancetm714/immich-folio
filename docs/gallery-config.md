@@ -207,6 +207,7 @@ albums:
 | `download`      | Offer originals for download — see [Originals download](gallery-features.md#originals-download)  |
 | `zoom`          | [Photo zoom](gallery-features.md#photo-zoom) for this album, over its page and the site setting  |
 | `hidden`        | Unlist a **standalone** album: reachable at its slug, absent from nav, homepage, sitemap and map |
+| `slug`          | Custom URL slug for a **standalone** album, instead of the one derived from its title            |
 
 ### Unlisted albums
 
@@ -217,16 +218,21 @@ site:
 albums:
   - '11111111-1111-1111-1111-111111111111':
       title: Client Preview
-      hidden: true # → /client-preview, but not in the menu or sitemap
+      hidden: true # not in the menu, homepage, sitemap or map
+      slug: x7k2m9p4 # → /x7k2m9p4
       password: 'clientpass123' # optional, but the slug itself is guessable
 ```
 
-`hidden` only applies to a top-level `albums:` entry. An album inside a subpage
-is unlisted by setting `hidden: true` on that subpage instead. Like an unlisted
-subpage, this is **unlisting, not access control**: the slug is derived from the
-album title and can be guessed, so combine it with `password` for anything that
-must stay private. The album's photos still load for anyone with the link, and
-the album is excluded from the homepage, header menu, sitemap and `/map`.
+`hidden` and `slug` only apply to a top-level `albums:` entry. An album inside a
+subpage is unlisted by setting `hidden: true` on that subpage instead; its URL
+comes from the page and the album title.
+
+Like an unlisted subpage, `hidden` is **unlisting, not access control**. Without
+`slug`, the address is derived from the album title and can be guessed. Give it
+a random `slug` (the admin panel's **Random link** button does this) and/or add a
+`password` for anything that must stay private. The album's photos still load for
+anyone with the link, and the album is excluded from the homepage, header menu,
+sitemap and `/map`.
 
 ### Per-album grid (experimental)
 

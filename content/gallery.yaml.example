@@ -47,6 +47,7 @@ albums:
   - "your-album-uuid-4":
       title: "Client Preview"
       hidden: true
+      slug: "x7k2m9p4" # optional: a hard-to-guess address (→ /x7k2m9p4)
       password: "scrypt:..."
 
 # Subpages: group albums under custom URL paths.

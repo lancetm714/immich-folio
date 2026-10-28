@@ -121,6 +121,12 @@ export const pages: AdminDictionary['pages'] = {
   },
 
   albumDrawer: {
+    link: 'Lien',
+    linkHint:
+      'C’est l’adresse utilisée par les visiteurs. Laissez le slug vide pour le dériver du titre.',
+    randomLink: 'Lien aléatoire',
+    copyLink: 'Copier le lien',
+    linkCopied: 'Copié',
     visibility: 'Visibilité',
     unlisted: 'Non répertorié',
     unlistedDesc:

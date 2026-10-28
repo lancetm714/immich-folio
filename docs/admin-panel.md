@@ -78,6 +78,7 @@ Each album supports:
 - **Title override** — a display name instead of the Immich album name
 - **Description** — shown below the album title
 - **Unlisted** — reachable at its own URL, but absent from the menu, homepage, sitemap and map. Unlisting is not access control; add a password for anything private
+- **Link** — the album's public address, with a copy button and a **Random link** button for an unguessable slug. Changing it breaks existing links
 - **Password** — protect a single album (written as an scrypt hash)
 - **Cover image** — override the album cover with any asset
 - **Photo order** — Immich order, newest, oldest, filename, or **Manual** with a drag & drop editor

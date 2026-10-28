@@ -10,6 +10,7 @@ import { ALBUM_SORT_MODES, isAlbumSortMode, type AlbumSortMode } from '../albumS
 import { LOCATION_PRECISIONS, isLocationPrecision, type LocationPrecision } from '../mapPrecision';
 import {
   slugify,
+  albumSlug,
   findAlbumSlugCollisions,
   resolveExifDisplay,
   resolveColorMode,
@@ -35,7 +36,7 @@ import {
 } from './schema';
 import { isValidSlug } from '../journal';
 import { getDictionary, resolveLocale } from '../i18n';
-import type { NavEntry } from '../pages';
+import { RESERVED_PAGE_SLUGS, type NavEntry } from '../pages';
 
 export * from './schema';
 export * from './theme';
@@ -268,6 +269,8 @@ export interface GalleryDerivation {
   standaloneAlbums: string[];
   /** Standalone albums marked `hidden: true`, reachable by direct link only. */
   hiddenAlbums: string[];
+  /** Custom slug per standalone album id. Absent means derived from its title. */
+  albumSlugs: Record<string, string>;
   subpages: SubpageConfig[];
   nav: NavEntry[];
   albumOverrides: Record<string, string>;
@@ -319,6 +322,12 @@ export function deriveGallery(gallery: GalleryYaml): GalleryDerivation {
    * can make an album unlisted: hiding a subpage already hides its albums.
    */
   const hiddenAlbums: string[] = [];
+  /**
+   * Custom slugs for standalone albums, also a per-route sink: a subpage
+   * album's URL is built from its page and title, so only top-level entries
+   * can set one.
+   */
+  const albumSlugs: Record<string, string> = {};
   const albumLocationPrecision: Record<string, LocationPrecision> = {};
 
   /** Returns null for an entry whose album ID is not a UUID; callers drop it. */
@@ -328,6 +337,7 @@ export function deriveGallery(gallery: GalleryYaml): GalleryDerivation {
     inheritedLocation?: LocationPrecision,
     zoomSink?: Record<string, boolean>,
     hiddenSink?: string[],
+    slugSink?: Record<string, string>,
   ): string | null {
     if (typeof entry === 'string') {
       if (inheritedLocation) albumLocationPrecision[entry] = inheritedLocation;
@@ -423,6 +433,18 @@ export function deriveGallery(gallery: GalleryYaml): GalleryDerivation {
         zoomSink[validatedUuid] = zoomSink[validatedUuid] !== false && value.zoom;
       }
       if (hiddenSink && value.hidden === true) hiddenSink.push(validatedUuid);
+      if (slugSink && value.slug != null) {
+        const custom = value.slug.trim();
+        if (custom) {
+          if (!isValidSlug(custom)) {
+            throw new Error(
+              `${context}: album ${validatedUuid} has an invalid slug "${value.slug}". ` +
+                `Use letters, digits, "-" and "_" only.`,
+            );
+          }
+          slugSink[validatedUuid] = custom;
+        }
+      }
       const location = parseLocation(value.location, `${context}: album ${validatedUuid} location`);
       if (location) albumLocationPrecision[validatedUuid] = location;
     }
@@ -436,9 +458,12 @@ export function deriveGallery(gallery: GalleryYaml): GalleryDerivation {
     inheritedLocation?: LocationPrecision,
     zoomSink?: Record<string, boolean>,
     hiddenSink?: string[],
+    slugSink?: Record<string, string>,
   ): string[] {
     return entries
-      .map((entry) => processAlbumEntry(entry, context, inheritedLocation, zoomSink, hiddenSink))
+      .map((entry) =>
+        processAlbumEntry(entry, context, inheritedLocation, zoomSink, hiddenSink, slugSink),
+      )
       .filter((id): id is string => id !== null);
   }
 
@@ -464,6 +489,7 @@ export function deriveGallery(gallery: GalleryYaml): GalleryDerivation {
     undefined,
     standaloneAlbumZoom,
     hiddenAlbums,
+    albumSlugs,
   );
 
   let subpages: SubpageConfig[] = [];
@@ -651,10 +677,48 @@ export function deriveGallery(gallery: GalleryYaml): GalleryDerivation {
     checkAlbumOverrideCollisions(`subpage "${sp.name}"`, sp.albumIds);
   }
 
+  // A custom slug has to be a usable route: not a built-in page, not a
+  // subpage's address (the subpage wins), and not shared with another
+  // standalone album. The names of albums that keep their Immich title are
+  // unknown here; the doctor's live check covers those.
+  const displayName = (id: string) => albumOverrides[id] ?? albumSlugs[id] ?? id;
+  const knownSlugOwners = new Map<string, string>();
+  for (const id of standaloneAlbums) {
+    const custom = albumSlugs[id];
+    if (custom) {
+      if (RESERVED_PAGE_SLUGS.includes(custom)) {
+        throw new Error(
+          `gallery.yaml albums: album "${displayName(id)}" uses the slug "${custom}", ` +
+            `which is a built-in route of the site. Choose another link.`,
+        );
+      }
+      const subpage = subpages.find((sp) => sp.slug === custom);
+      if (subpage) {
+        throw new Error(
+          `gallery.yaml albums: album "${displayName(id)}" uses the slug "${custom}", ` +
+            `which is already the subpage "${subpage.name}". Choose another link.`,
+        );
+      }
+    }
+    const effective = custom ?? (albumOverrides[id] ? albumSlug(albumOverrides[id], id) : null);
+    if (!effective) continue;
+    const owner = knownSlugOwners.get(effective);
+    if (owner) {
+      throw new Error(
+        `gallery.yaml albums: "${displayName(owner)}" and "${displayName(id)}" both produce ` +
+          `the slug "${effective}". Give one a different slug or title.`,
+      );
+    }
+    knownSlugOwners.set(effective, id);
+  }
+
   return {
     albums: allAlbumIds,
     standaloneAlbums,
     hiddenAlbums: [...new Set(hiddenAlbums)].filter((id) => standaloneAlbums.includes(id)),
+    albumSlugs: Object.fromEntries(
+      Object.entries(albumSlugs).filter(([id]) => standaloneAlbums.includes(id)),
+    ),
     subpages,
     nav,
     albumOverrides,
@@ -755,6 +819,7 @@ function deriveConfig(): AppConfig {
       albums: [],
       standaloneAlbums: [],
       hiddenAlbums: [],
+      albumSlugs: {},
       subpages: [],
       nav: [],
       siteTitle: env.SITE_TITLE || 'Immich Folio',
@@ -820,6 +885,7 @@ function deriveConfig(): AppConfig {
     albums: allAlbumIds,
     standaloneAlbums,
     hiddenAlbums,
+    albumSlugs,
     subpages,
     nav,
     albumOverrides,
@@ -846,6 +912,7 @@ function deriveConfig(): AppConfig {
     albums: allAlbumIds,
     standaloneAlbums,
     hiddenAlbums,
+    albumSlugs,
     subpages,
     nav,
     siteTitle: settings.title ?? defaultTitle,

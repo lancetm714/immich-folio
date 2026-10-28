@@ -115,6 +115,12 @@ export const pages: AdminDictionary['pages'] = {
   },
 
   albumDrawer: {
+    link: 'Link',
+    linkHint:
+      'Dit is het adres dat bezoekers gebruiken. Laat de slug leeg om hem uit de titel af te leiden.',
+    randomLink: 'Willekeurige link',
+    copyLink: 'Link kopiëren',
+    linkCopied: 'Gekopieerd',
     visibility: 'Zichtbaarheid',
     unlisted: 'Niet vermeld',
     unlistedDesc:

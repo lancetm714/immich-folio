@@ -32,6 +32,7 @@ import {
 } from './page-builder/SortableTiles';
 import PagePanel from './page-builder/PagePanel';
 import { isValidSlug } from '@/lib/journal';
+import { albumSlug } from '@/lib/config/schema';
 import NewPageDialog from './page-builder/NewPageDialog';
 import type { PageSummary, SlugTakenBy } from '@/lib/pages';
 import { findAlbumAddress } from './page-builder/findAlbumAddress';
@@ -711,11 +712,28 @@ export default function PageBuilder() {
   function getEditingAlbumInfo(addr: ActiveEditAlbumAddress) {
     const album = ops.albumsAt(gallery, addr)?.[addr.albumIndex];
     if (!album) return null;
+    // The drawer shows the same slug the route will use: the custom one when
+    // set, otherwise the title's. A subpage album's address also carries its
+    // page, and only a standalone entry can choose the slug.
+    const displayName = album.title || getAlbumName(album.id);
+    const derivedSlug = albumSlug(displayName, album.id);
+    const effectiveSlug = album.slug || derivedSlug;
     return {
       album,
       name: getAlbumName(album.id),
       count: getAlbumCount(album.id),
       thumbnailId: getAlbumThumbnailId(album.id),
+      ...(addr.type === 'standalone'
+        ? {
+            link: {
+              path: `/${effectiveSlug}`,
+              slug: album.slug ?? '',
+              derived: derivedSlug,
+              onChange: (slug: string | undefined) =>
+                edit((g) => ops.updateAlbum(g, addr, addr.albumIndex, { slug })),
+            },
+          }
+        : {}),
       onUpdate: (updates: Partial<AlbumEntry>) =>
         edit((g) => ops.updateAlbum(g, addr, addr.albumIndex, updates)),
       onRemove: () => {

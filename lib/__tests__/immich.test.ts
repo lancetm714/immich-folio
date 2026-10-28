@@ -12,6 +12,8 @@ const albumManualOrders: Record<string, string[]> = {};
 const subpages: { slug: string; albumIds: string[]; enabled?: boolean }[] = [];
 // Unlisted standalone albums, e.g. a client preview reachable by direct link.
 const hiddenAlbums: string[] = [];
+// Custom slugs, keyed by album id.
+const albumSlugs: Record<string, string> = {};
 
 // Mock the config by wrapping it in a factory
 vi.mock('../config', async () => {
@@ -27,6 +29,7 @@ vi.mock('../config', async () => {
         (id) => !subpages.some((sp) => sp.albumIds.includes(id)),
       ),
       hiddenAlbums,
+      albumSlugs,
       subpages,
       albumOverrides: { 'album-1': 'Override Name' },
       albumDescriptions: {},
@@ -56,6 +59,7 @@ describe('ImmichClient', () => {
     for (const key of Object.keys(albumSortModes)) delete albumSortModes[key];
     for (const key of Object.keys(albumManualOrders)) delete albumManualOrders[key];
     hiddenAlbums.length = 0;
+    for (const key of Object.keys(albumSlugs)) delete albumSlugs[key];
   });
 
   describe('request()', () => {
@@ -668,6 +672,20 @@ describe('ImmichClient', () => {
       ]);
       // The direct link still resolves: unlisting is not a 404.
       expect((await immich.findAlbumBySlug('second'))?.id).toBe('album-2');
+    });
+
+    it('uses a custom slug instead of the one derived from the title', async () => {
+      albumSlugs['album-2'] = 'x7k2m9p4';
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => [{ id: 'album-2', albumName: 'Second', assetCount: 1 }],
+      });
+
+      const [album] = await immich.getStandaloneAlbums();
+      expect(album.slug).toBe('x7k2m9p4');
+      expect(await immich.findAlbumBySlug('x7k2m9p4')).not.toBeNull();
+      expect(await immich.findAlbumBySlug('second')).toBeNull();
     });
   });
 

@@ -108,6 +108,11 @@ export const pages = {
   },
 
   albumDrawer: {
+    link: 'Link',
+    linkHint: 'This is the address visitors use. Leave the slug empty to derive it from the title.',
+    randomLink: 'Random link',
+    copyLink: 'Copy link',
+    linkCopied: 'Copied',
     heading: 'Edit Album Details',
     close: 'Close details',
     photos: (n: number) => `${n} ${n === 1 ? 'photo' : 'photos'}`,
