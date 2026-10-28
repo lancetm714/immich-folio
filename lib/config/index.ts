@@ -266,6 +266,8 @@ export function resolveContact(
 export interface GalleryDerivation {
   albums: string[];
   standaloneAlbums: string[];
+  /** Standalone albums marked `hidden: true`, reachable by direct link only. */
+  hiddenAlbums: string[];
   subpages: SubpageConfig[];
   nav: NavEntry[];
   albumOverrides: Record<string, string>;
@@ -311,6 +313,12 @@ export function deriveGallery(gallery: GalleryYaml): GalleryDerivation {
    * whichever entry came last decide for both.
    */
   const standaloneAlbumZoom: Record<string, boolean> = {};
+  /**
+   * Unlisted standalone albums, in entry order. A sink like `zoomSink` so the
+   * same parser can read top-level and subpage entries, and only the former
+   * can make an album unlisted: hiding a subpage already hides its albums.
+   */
+  const hiddenAlbums: string[] = [];
   const albumLocationPrecision: Record<string, LocationPrecision> = {};
 
   /** Returns null for an entry whose album ID is not a UUID; callers drop it. */
@@ -319,6 +327,7 @@ export function deriveGallery(gallery: GalleryYaml): GalleryDerivation {
     context: string,
     inheritedLocation?: LocationPrecision,
     zoomSink?: Record<string, boolean>,
+    hiddenSink?: string[],
   ): string | null {
     if (typeof entry === 'string') {
       if (inheritedLocation) albumLocationPrecision[entry] = inheritedLocation;
@@ -413,6 +422,7 @@ export function deriveGallery(gallery: GalleryYaml): GalleryDerivation {
       if (zoomSink && typeof value.zoom === 'boolean') {
         zoomSink[validatedUuid] = zoomSink[validatedUuid] !== false && value.zoom;
       }
+      if (hiddenSink && value.hidden === true) hiddenSink.push(validatedUuid);
       const location = parseLocation(value.location, `${context}: album ${validatedUuid} location`);
       if (location) albumLocationPrecision[validatedUuid] = location;
     }
@@ -425,9 +435,10 @@ export function deriveGallery(gallery: GalleryYaml): GalleryDerivation {
     context: string,
     inheritedLocation?: LocationPrecision,
     zoomSink?: Record<string, boolean>,
+    hiddenSink?: string[],
   ): string[] {
     return entries
-      .map((entry) => processAlbumEntry(entry, context, inheritedLocation, zoomSink))
+      .map((entry) => processAlbumEntry(entry, context, inheritedLocation, zoomSink, hiddenSink))
       .filter((id): id is string => id !== null);
   }
 
@@ -452,6 +463,7 @@ export function deriveGallery(gallery: GalleryYaml): GalleryDerivation {
     'gallery.yaml albums',
     undefined,
     standaloneAlbumZoom,
+    hiddenAlbums,
   );
 
   let subpages: SubpageConfig[] = [];
@@ -642,6 +654,7 @@ export function deriveGallery(gallery: GalleryYaml): GalleryDerivation {
   return {
     albums: allAlbumIds,
     standaloneAlbums,
+    hiddenAlbums: [...new Set(hiddenAlbums)].filter((id) => standaloneAlbums.includes(id)),
     subpages,
     nav,
     albumOverrides,
@@ -741,6 +754,7 @@ function deriveConfig(): AppConfig {
       authSecret,
       albums: [],
       standaloneAlbums: [],
+      hiddenAlbums: [],
       subpages: [],
       nav: [],
       siteTitle: env.SITE_TITLE || 'Immich Folio',
@@ -805,6 +819,7 @@ function deriveConfig(): AppConfig {
   const {
     albums: allAlbumIds,
     standaloneAlbums,
+    hiddenAlbums,
     subpages,
     nav,
     albumOverrides,
@@ -830,6 +845,7 @@ function deriveConfig(): AppConfig {
     authSecret,
     albums: allAlbumIds,
     standaloneAlbums,
+    hiddenAlbums,
     subpages,
     nav,
     siteTitle: settings.title ?? defaultTitle,

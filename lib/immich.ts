@@ -555,14 +555,18 @@ class ImmichClient {
   }
 
   /**
-   * Get only standalone albums (not in any subpage) — for the homepage.
+   * Get only standalone albums (not in any subpage) — for the homepage and the
+   * navigation. Unlisted albums are left out unless `includeHidden` asks for
+   * them (slug collision checks still need to know every taken URL).
    */
-  async getStandaloneAlbums(forceFresh = false): Promise<ImmichAlbum[]> {
+  async getStandaloneAlbums(forceFresh = false, includeHidden = false): Promise<ImmichAlbum[]> {
     const albums = await this.getAlbums(forceFresh);
+    const config = this.config;
     // The API returns albums in its own order; gallery.yaml order wins.
-    const orderIdx = new Map(this.config.standaloneAlbums.map((id, i) => [id, i]));
+    const orderIdx = new Map(config.standaloneAlbums.map((id, i) => [id, i]));
+    const hidden = includeHidden ? null : new Set(config.hiddenAlbums);
     return albums
-      .filter((a) => orderIdx.has(a.id))
+      .filter((a) => orderIdx.has(a.id) && !hidden?.has(a.id))
       .sort((a, b) => orderIdx.get(a.id)! - orderIdx.get(b.id)!);
   }
 

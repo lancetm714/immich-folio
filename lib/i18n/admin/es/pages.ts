@@ -100,6 +100,7 @@ export const pages: AdminDictionary['pages'] = {
   },
 
   albumCard: {
+    unlisted: 'Álbum independiente no listado',
     reorder: (name: string) => `Reordenar ${name}`,
     dragToReorder: 'Arrastra para reordenar',
     editDetails: 'Editar detalles',
@@ -112,6 +113,12 @@ export const pages: AdminDictionary['pages'] = {
   },
 
   albumDrawer: {
+    visibility: 'Visibilidad',
+    unlisted: 'No listado',
+    unlistedDesc:
+      'Solo accesible mediante enlace directo: no aparece en el menú, la página de inicio, el sitemap ni el mapa. La URL es adivinable; añade una contraseña para lo que deba ser privado.',
+    listedDesc:
+      'Se muestra en el menú, la página de inicio y el sitemap, como cualquier otro álbum independiente.',
     heading: 'Editar detalles del álbum',
     close: 'Cerrar detalles',
     photos: (n: number) => `${n} ${n === 1 ? 'foto' : 'fotos'}`,

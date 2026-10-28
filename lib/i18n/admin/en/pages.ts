@@ -97,6 +97,7 @@ export const pages = {
     removeAlbum: 'Remove album',
     passwordProtected: 'Password protected',
     customHero: 'Custom Hero Image set',
+    unlisted: 'Unlisted standalone album',
     /** `label` is one of the `sort` labels. */
     photoOrder: (label: string) => `Photo order: ${label}`,
     /** English deliberately says "photos" for every count here. */
@@ -117,6 +118,11 @@ export const pages = {
     downloads: 'Downloads',
     allowDownloads: 'Allow original downloads',
     allowDownloadsDesc: 'Visitors can download the whole album or their selected photos as a ZIP',
+    visibility: 'Visibility',
+    unlisted: 'Unlisted',
+    unlistedDesc:
+      'Reachable only by direct link — not in the menu, homepage, sitemap or map. The URL is guessable; add a password for anything private.',
+    listedDesc: 'Shown in the menu, homepage and sitemap, like every other standalone album.',
     zoomInherit: 'Inherit from page / site settings',
     zoomHint:
       "Lets visitors zoom into a photo in the viewer to check sharpness. JPEG and AVIF originals are shown without their GPS data; HEIC and RAW need Immich's full-size previews. PNG, WebP, GIF and photos edited in Immich are never zoomed. Applies where the album is listed here.",

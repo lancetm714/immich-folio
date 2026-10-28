@@ -21,6 +21,11 @@ interface AlbumDrawerProps {
   onClose: () => void;
   onPickHero: (target: HeroPickerTarget | null) => void;
   onEditOrder: (target: OrderEditorTarget | null) => void;
+  /**
+   * Only standalone albums can be unlisted. A subpage album is hidden by
+   * hiding its page, so the control would be a no-op there.
+   */
+  showVisibility?: boolean;
 }
 
 /**
@@ -38,6 +43,7 @@ export default function AlbumDrawer({
   onClose,
   onPickHero,
   onEditOrder,
+  showVisibility = false,
 }: AlbumDrawerProps) {
   const dict = useAdminDictionary();
   const t = dict.pages.albumDrawer;
@@ -112,6 +118,45 @@ export default function AlbumDrawer({
                   rows={4}
                 />
               </div>
+
+              {showVisibility && (
+                <div className="admin-field">
+                  <span className="admin-field-label">{t.visibility}</span>
+                  <button
+                    type="button"
+                    className={`admin-toggle-card ${album.hidden ? 'active' : ''}`}
+                    onClick={() => onUpdate({ hidden: album.hidden ? undefined : true })}
+                    aria-pressed={!!album.hidden}
+                    style={{
+                      padding: '10px 14px',
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <div className="toggle-card-info" style={{ textAlign: 'left' }}>
+                      <span
+                        className="toggle-card-title"
+                        style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center' }}
+                      >
+                        {t.unlisted}
+                      </span>
+                      <span
+                        className="toggle-card-desc"
+                        style={{ fontSize: '0.8rem', display: 'block', opacity: 0.75 }}
+                      >
+                        {album.hidden ? t.unlistedDesc : t.listedDesc}
+                      </span>
+                    </div>
+                    <div className={`switch-toggle ${album.hidden ? 'on' : ''}`}>
+                      <span className="switch-slider" />
+                    </div>
+                  </button>
+                </div>
+              )}
 
               <div className="admin-field">
                 <label htmlFor="album-password">{t.passwordProtection}</label>

@@ -178,6 +178,34 @@ describe('deriveGallery accepts valid structures', () => {
     expect(open?.hidden).toBeFalsy();
   });
 
+  // Unlisted standalone albums: their own URL still resolves, but listings
+  // leave them out. A `hidden` flag on an album inside a subpage is ignored;
+  // that page controls visibility for everything it shows.
+  it('derives unlisted standalone albums and ignores the flag on subpage albums', () => {
+    const result = deriveGallery({
+      albums: [
+        A,
+        { [B]: { title: 'Client Preview', hidden: true } },
+        { [A]: { hidden: true } },
+      ] as unknown as GalleryYaml['albums'],
+      subpages: [{ name: 'Open', albums: [{ [A]: { hidden: true } }] }],
+    } as unknown as GalleryYaml);
+
+    // album-1 is only on the subpage now, so only album-2 stays standalone.
+    expect(result.standaloneAlbums).toEqual([B]);
+    expect(result.hiddenAlbums).toEqual([B]);
+  });
+
+  it('keeps a hidden album in the allowlist so its direct link still loads', () => {
+    const result = deriveGallery({
+      albums: [{ [A]: { hidden: true } }],
+    } as unknown as GalleryYaml);
+
+    expect(result.hiddenAlbums).toEqual([A]);
+    expect(result.albums).toContain(A);
+    expect(result.standaloneAlbums).toContain(A);
+  });
+
   // EXPERIMENTAL: per-album grid overrides — merged over subpage/global grid.
   it('collects per-album grid overrides, dropping unknown layouts to masonry', () => {
     const result = deriveGallery({

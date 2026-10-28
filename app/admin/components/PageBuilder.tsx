@@ -1169,6 +1169,7 @@ export default function PageBuilder() {
         return (
           <AlbumDrawer
             {...info}
+            showVisibility={editingAlbumAddress.type === 'standalone'}
             onClose={() => setEditingAlbumAddress(null)}
             onPickHero={setHeroPickerTarget}
             onEditOrder={setOrderEditorTarget}

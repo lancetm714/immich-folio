@@ -98,6 +98,7 @@ export const pages: AdminDictionary['pages'] = {
   },
 
   albumCard: {
+    unlisted: 'Niet vermeld los album',
     reorder: (name: string) => `${name} herschikken`,
     dragToReorder: 'Sleep om te herschikken',
     editDetails: 'Details bewerken',
@@ -111,6 +112,12 @@ export const pages: AdminDictionary['pages'] = {
   },
 
   albumDrawer: {
+    visibility: 'Zichtbaarheid',
+    unlisted: 'Niet vermeld',
+    unlistedDesc:
+      'Alleen bereikbaar via een directe link — niet in het menu, op de homepage, in de sitemap of op de kaart. De URL is raadbaar; voeg een wachtwoord toe voor alles wat privé moet blijven.',
+    listedDesc:
+      'Wordt net als elk ander los album getoond in het menu, op de homepage en in de sitemap.',
     heading: 'Albumdetails bewerken',
     close: 'Details sluiten',
     photos: (n: number) => `${n} ${n === 1 ? 'foto' : 'foto’s'}`,

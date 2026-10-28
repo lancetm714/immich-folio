@@ -194,18 +194,39 @@ albums:
       download: true
 ```
 
-| Key             | Description                                                                                     |
-| --------------- | ----------------------------------------------------------------------------------------------- |
-| `title`         | Display name instead of the Immich album name                                                   |
-| `description`   | Shown below the album title                                                                     |
-| `password`      | Gates this album alone — see [Password Protection](gallery-features.md#password-protection)     |
-| `heroImage`     | Asset UUID overriding the album cover                                                           |
-| `sort`          | Photo order — see [Photo Order Within an Album](#photo-order-within-an-album)                   |
-| `assetOrder`    | Pinned asset UUIDs for `sort: manual`                                                           |
-| `grid`          | **Experimental.** Grid override for this album only                                             |
-| `coverPosition` | **Experimental.** Focal point for the cover crop                                                |
-| `download`      | Offer originals for download — see [Originals download](gallery-features.md#originals-download) |
-| `zoom`          | [Photo zoom](gallery-features.md#photo-zoom) for this album, over its page and the site setting |
+| Key             | Description                                                                                      |
+| --------------- | ------------------------------------------------------------------------------------------------ |
+| `title`         | Display name instead of the Immich album name                                                    |
+| `description`   | Shown below the album title                                                                      |
+| `password`      | Gates this album alone — see [Password Protection](gallery-features.md#password-protection)      |
+| `heroImage`     | Asset UUID overriding the album cover                                                            |
+| `sort`          | Photo order — see [Photo Order Within an Album](#photo-order-within-an-album)                    |
+| `assetOrder`    | Pinned asset UUIDs for `sort: manual`                                                            |
+| `grid`          | **Experimental.** Grid override for this album only                                              |
+| `coverPosition` | **Experimental.** Focal point for the cover crop                                                 |
+| `download`      | Offer originals for download — see [Originals download](gallery-features.md#originals-download)  |
+| `zoom`          | [Photo zoom](gallery-features.md#photo-zoom) for this album, over its page and the site setting  |
+| `hidden`        | Unlist a **standalone** album: reachable at its slug, absent from nav, homepage, sitemap and map |
+
+### Unlisted albums
+
+A standalone album can be given its own link without appearing anywhere on the
+site:
+
+```yaml
+albums:
+  - '11111111-1111-1111-1111-111111111111':
+      title: Client Preview
+      hidden: true # → /client-preview, but not in the menu or sitemap
+      password: 'clientpass123' # optional, but the slug itself is guessable
+```
+
+`hidden` only applies to a top-level `albums:` entry. An album inside a subpage
+is unlisted by setting `hidden: true` on that subpage instead. Like an unlisted
+subpage, this is **unlisting, not access control**: the slug is derived from the
+album title and can be guessed, so combine it with `password` for anything that
+must stay private. The album's photos still load for anyone with the link, and
+the album is excluded from the homepage, header menu, sitemap and `/map`.
 
 ### Per-album grid (experimental)
 

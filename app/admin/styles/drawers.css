@@ -155,6 +155,10 @@ h3 .svg-icon {
   background: rgba(245, 158, 11, 0.05);
 }
 
+.album-tile-badges .badge-unlisted {
+  border-style: dashed;
+}
+
 .album-tile-badges .badge-hero {
   color: var(--admin-success);
   border-color: rgba(74, 222, 128, 0.3);
